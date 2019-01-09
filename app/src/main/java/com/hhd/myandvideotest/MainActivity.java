@@ -21,15 +21,13 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
 
         Context context = this.getBaseContext();
-        int DP = (int)TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 1, this.getResources().getDisplayMetrics());
-        int SP = (int)TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 1, this.getResources().getDisplayMetrics());
-        ViewGroup.LayoutParams MP_MP = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        ViewGroup.LayoutParams lpMpMp = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
 
         ScrollView svRoot = new ScrollView(context);
-        svRoot.setLayoutParams(MP_MP);
+        svRoot.setLayoutParams(lpMpMp);
         this.setContentView(svRoot);
         LinearLayout llRoot = new LinearLayout(context);
-        llRoot.setLayoutParams(MP_MP);
+        llRoot.setLayoutParams(lpMpMp);
         llRoot.setOrientation(LinearLayout.VERTICAL);
         svRoot.addView(llRoot);
 
@@ -46,14 +44,13 @@ public class MainActivity extends AppCompatActivity {
 
                 TextView tv = new TextView(context);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-                lp.topMargin = DP * 10;
-                lp.bottomMargin = DP * 10;
-                lp.leftMargin = DP * 10;
-                lp.rightMargin = DP * 10;
+                lp.topMargin = (int) (MyUtil.get1DP(context) * 10);
+                lp.bottomMargin = (int) (MyUtil.get1DP(context) * 10);
+                lp.leftMargin = (int) (MyUtil.get1DP(context) * 10);
+                lp.rightMargin = (int) (MyUtil.get1DP(context) * 10);
                 tv.setLayoutParams(lp);
                 tv.setText(aClass.getSimpleName());
                 tv.setTextColor(0xff000000);
-                tv.setTextSize(SP * 10);
                 llRoot.addView(tv);
                 tv.setTag(aClass);
 
@@ -66,7 +63,7 @@ public class MainActivity extends AppCompatActivity {
                 });
 
                 View splitter = new View(context);
-                splitter.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, DP * 1));
+                splitter.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (MyUtil.get1DP(context) * 1)));
                 splitter.setBackgroundColor(0xff000000);
                 llRoot.addView(splitter);
             }
