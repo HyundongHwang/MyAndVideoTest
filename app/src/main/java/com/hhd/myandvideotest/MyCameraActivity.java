@@ -86,11 +86,11 @@ public class MyCameraActivity extends AppCompatActivity {
 
         try {
             _latch_pictureTaken.await();
+            _latch_pictureTaken = new CountDownLatch(1);
+            _camera.startPreview();
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-        _latch_pictureTaken = new CountDownLatch(1);
 
         new AsyncTask<Void, Void, Void>() {
             @Override
@@ -119,7 +119,6 @@ public class MyCameraActivity extends AppCompatActivity {
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
-        _camera.startPreview();
     }
 
 
@@ -142,7 +141,6 @@ public class MyCameraActivity extends AppCompatActivity {
 
         _camera.stopPreview();
     }
-
 
 
     private void _surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
