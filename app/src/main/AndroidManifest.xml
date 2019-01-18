@@ -22,5 +22,6 @@
         </activity>
         <activity android:name=".MyTestActivity" />
         <activity android:name=".MyCameraActivity" android:screenOrientation="landscape"/>
+        <activity android:name=".MyCameraTextureViewActivity" android:screenOrientation="landscape"/>
     </application>
 </manifest>

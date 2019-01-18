@@ -2,6 +2,9 @@ package com.hhd.myandvideotest;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
@@ -70,6 +73,13 @@ public class MyTestActivity extends AppCompatActivity {
             }
         }));
 
+        cmdInfoList.add(new CmdInfo("CameraManager_Char", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                _CameraManager_Char(v);
+            }
+        }));
+
         for (CmdInfo cmdInfo : cmdInfoList) {
             LinearLayout.LayoutParams lpMpWc = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 
@@ -86,6 +96,20 @@ public class MyTestActivity extends AppCompatActivity {
             llRoot.addView(tv);
 
             btn.setTag(tv);
+        }
+    }
+
+    private void _CameraManager_Char(View v) {
+        try {
+            MyUtil.clearTestBtnLog(v);
+            CameraManager mgr = (CameraManager)this.getSystemService(Context.CAMERA_SERVICE);
+            String camId = mgr.getCameraIdList()[0];
+            CameraCharacteristics chars = mgr.getCameraCharacteristics(camId);
+            Integer level = chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
+            boolean is_INFO_SUPPORTED_HARDWARE_LEVEL_FULL = level == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL;
+            MyUtil.writeTestBtnLog(v, "is_INFO_SUPPORTED_HARDWARE_LEVEL_FULL[%b]", is_INFO_SUPPORTED_HARDWARE_LEVEL_FULL);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
         }
     }
 
