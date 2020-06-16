@@ -56,8 +56,6 @@
 
 [![](https://img.youtube.com/vi/dNJWjYlF2uc/0.jpg)](https://www.youtube.com/watch?v=dNJWjYlF2uc)
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/dNJWjYlF2uc" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-
 ## 파이프라인 구성
 
 <!--
