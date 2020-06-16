@@ -60,7 +60,6 @@
 
 <!--
 @startuml
-
 rectangle MyPipeLine {
 	rectangle MyCamera {
 	}
@@ -73,11 +72,11 @@ rectangle MyPipeLine {
 	}
 }
 
-MyCamera --> MyRenderer
-MyExtraRenderer <--> MyExtraRenderer
-MyRenderer --> MyEncoder
-MediaCodec <--> MediaCodec
-MediaCodec --> MediaMuxer
+MyCamera ---> MyRenderer
+MyExtraRenderer <---> MyExtraRenderer
+MyRenderer ---> MyEncoder
+MediaCodec <---> MediaCodec
+MediaCodec ---> MediaMuxer
 @enduml
 -->
 
