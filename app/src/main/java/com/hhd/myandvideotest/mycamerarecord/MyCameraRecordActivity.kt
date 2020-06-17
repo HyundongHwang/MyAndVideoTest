@@ -60,14 +60,13 @@ class MyCameraRecordActivity : AppCompatActivity() {
     }
 
     private fun _camera_stop() {
-        _pipeline.stopCamera()
-
         if (_isRecordStart) {
             _pipeline.stopEncoder()
             _isRecordStart = false
             this.btn_record_start_stop.text = "record start"
         }
 
+        _pipeline.stopCamera()
         _isCameraStart = false
         this.btn_camera_start_stop.text = "camera start"
     }
@@ -89,7 +88,7 @@ class MyCameraRecordActivity : AppCompatActivity() {
         val date = Date(System.currentTimeMillis())
         val sdf = SimpleDateFormat("yyMMdd_HHmmss")
         val outputFile =
-            File(Environment.getExternalStorageDirectory(), "mycamera_${sdf.format(date)}.mp4")
+            File(Environment.getExternalStorageDirectory(), "mycamerarecord_${sdf.format(date)}.mp4")
         val width: Int
         val height: Int
 
