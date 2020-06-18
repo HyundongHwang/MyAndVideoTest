@@ -4,7 +4,7 @@ import android.os.Bundle
 import android.os.Environment
 import androidx.appcompat.app.AppCompatActivity
 import com.hhd.myandvideotest.R
-import com.hhd.myandvideotest.mycamerarecord.MyPipeLine
+import com.hhd.myandvideotest.mycamerarecord.MyCrPipeLine
 import com.hhd.myandvideotest.util.MyActivityUtil
 import com.hhd.myandvideotest.util.MyUtil
 import kotlinx.android.synthetic.main.my_camera_record_activity.*
@@ -20,7 +20,7 @@ class MyCameraRecordActivity : AppCompatActivity() {
     private val _VIDEO_IFRAME_INTERVAL: Int = 1
     private val _VIDEO_MIME_TYPE: String = "video/avc"
     private val _VIDEO_WIDTH = 1280 // dimensions for 720p video
-    private val _pipeline = MyPipeLine()
+    private val _pipeline = MyCrPipeLine()
     private var _isCameraStart: Boolean = false
     private var _isRecordStart: Boolean = false
 

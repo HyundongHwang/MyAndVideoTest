@@ -5,6 +5,8 @@ import android.util.Log;
 
 import com.google.gson.GsonBuilder;
 
+import java.util.ArrayList;
+
 
 public class LogEx {
 
@@ -40,6 +42,11 @@ public class LogEx {
 
             valueStr = value.toString();
         } else {
+            try {
+                valueStr = MyUtil.toJsonStr(value);
+            } catch (Exception ex) {
+                valueStr = String.format("%s %s", value.getClass().getSimpleName(), ex.getClass().getSimpleName());
+            }
         }
 
         String logStr = String.format("%s:::%s", valueDesc, valueStr);
@@ -62,7 +69,7 @@ public class LogEx {
             callParamStr = callParam.toString();
         } else {
             try {
-                callParamStr = _toJsonStr(callParam);
+                callParamStr = MyUtil.toJsonStr(callParam);
             } catch (Exception ex) {
                 callParamStr = String.format("%s %s", callParam.getClass().getSimpleName(), ex.getClass().getSimpleName());
             }
@@ -88,7 +95,7 @@ public class LogEx {
             callParamStr = callParam.toString();
         } else {
             try {
-                callParamStr = _toJsonStr(callParam);
+                callParamStr = MyUtil.toJsonStr(callParam);
             } catch (Exception ex) {
                 callParamStr = String.format("%s %s", callParam.getClass().getSimpleName(), ex.getClass().getSimpleName());
             }
@@ -198,12 +205,5 @@ public class LogEx {
         }
     }
 
-    private static String _toJsonStr(Object obj) {
-        String res = new GsonBuilder()
-                .setPrettyPrinting()
-                .create()
-                .toJson(obj);
 
-        return res;
-    }
 }

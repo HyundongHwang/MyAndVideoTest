@@ -15,10 +15,6 @@ class MyRenderer {
     private var _frameNum: Int = 0
     private var _fullFrameRect: FullFrameRect? = null
 
-
-    constructor() {
-    }
-
     fun start() {
         _fullFrameRect = FullFrameRect(Texture2dProgram(Texture2dProgram.ProgramType.TEXTURE_EXT))
         textureId = _fullFrameRect!!.createTextureObject()

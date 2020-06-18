@@ -39,7 +39,7 @@ class MyEncoder {
         format.setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
         format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameInterval)
-        LogEx.d("format[$format]")
+        LogEx.value("format", format)
 
         // MediaCodec 인코더를 작성하고 형식으로 구성하십시오. 표면을 얻으십시오
         //  입력에 사용하고 EGL 작업을 처리하는 클래스로 랩핑 할 수 있습니다.

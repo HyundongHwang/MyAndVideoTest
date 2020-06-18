@@ -25,6 +25,7 @@
         </activity>
 
         <activity android:name=".mycamerarecordrecord.MyCameraRecordActivity" />
+        <activity android:name=".myplayvideo.MyPlayVideoActivity" />
 
     </application>
 
