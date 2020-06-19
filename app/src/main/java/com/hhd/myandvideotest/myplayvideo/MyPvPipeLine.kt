@@ -1,5 +1,6 @@
 package com.hhd.myandvideotest.myplayvideo
 
+import android.media.MediaCodec
 import android.view.Surface
 import com.hhd.myandvideotest.util.MyUtil
 import io.reactivex.android.schedulers.AndroidSchedulers
@@ -8,6 +9,19 @@ import java.io.File
 
 class MyPvPipeLine {
 
+    var speedRatio: Double
+        get() {
+            if (_myVideoPlayer == null)
+                return 1.0
+
+            return _myVideoPlayer!!.speedRatio
+        }
+        set(value) {
+            if (_myVideoPlayer == null)
+                return
+
+            _myVideoPlayer!!.speedRatio = value
+        }
 
     private var _myVideoPlayer: MyVideoPlayer? = null
     private val _pipeline = PublishSubject.create<Array<Any>>()

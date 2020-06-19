@@ -14,7 +14,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_margin="5dp"
-            android:spinnerMode="dialog"/>
+            android:spinnerMode="dialog" />
 
         <SurfaceView
             android:id="@+id/sv"
@@ -22,13 +22,27 @@
             android:layout_height="533dp"
             android:layout_margin="5dp" />
 
-        <Button
-            android:id="@+id/btn_play_stop"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_margin="5dp"
-            android:text="play"
-            android:textAllCaps="false" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <Button
+                android:id="@+id/btn_play_stop"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="5dp"
+                android:text="play"
+                android:textAllCaps="false" />
+
+            <Spinner
+                android:id="@+id/sp_speed_ratio"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="5dp"
+                android:spinnerMode="dialog" />
+
+        </LinearLayout>
+
 
     </LinearLayout>
 

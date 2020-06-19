@@ -5,16 +5,21 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.view.Surface
 import com.hhd.myandvideotest.util.LogEx
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import java.io.File
-import java.util.ArrayDeque
+import java.util.*
 
 class MyVideoPlayer {
 
-    private var _availInBufIdxArray: ArrayDeque<Int>? = null
-    private var _availOutBufIdxArray: ArrayDeque<Int>? = null
+    private val _FRAME_SKIP_MS: Int = 1_000
     private var _extractor: MediaExtractor? = null
+    private var _fps: Int = 0
     private var _isPlaying = false
+    private var _lastRenderUs: Long = 0
     private var _vCodec: MediaCodec? = null
+    private var _videoDurationUs: Long = 0
+    var speedRatio = 1.0
 
     fun play(file: File, renderSurface: Surface) {
         if (_isPlaying) {
@@ -35,16 +40,17 @@ class MyVideoPlayer {
             val mime = fmt.getString(MediaFormat.KEY_MIME)
 
             if (mime.contains("video/")) {
+                LogEx.value("fmt", fmt)
                 _extractor!!.selectTrack(i)
                 _vCodec = MediaCodec.createDecoderByType(mime)
                 _vCodec!!.configure(fmt, renderSurface, null, 0)
+                _videoDurationUs = fmt.getLong(MediaFormat.KEY_DURATION)
+                _fps = fmt.getInteger(MediaFormat.KEY_FRAME_RATE)
                 break
             }
         }
 
         _vCodec!!.start()
-        _availInBufIdxArray = ArrayDeque<Int>()
-        _availOutBufIdxArray = ArrayDeque<Int>()
     }
 
     enum class ReturnCodes {
@@ -53,7 +59,7 @@ class MyVideoPlayer {
         STOP,
     }
 
-    fun processCodecInputBuffer() : ReturnCodes {
+    fun processCodecInputBuffer(): ReturnCodes {
         if (!_isPlaying)
             return ReturnCodes.STOP
 
@@ -63,31 +69,32 @@ class MyVideoPlayer {
                     MediaCodec.BUFFER_FLAG_END_OF_STREAM
 
         if (isEos) {
-            LogEx.e("EOS")
+            LogEx.i("EOS")
             return ReturnCodes.EOS
         }
+
+        val idxQueue = ArrayDeque<Int>()
 
         while (true) {
             if (!_isPlaying)
                 return ReturnCodes.STOP
 
             val idx = _vCodec!!.dequeueInputBuffer(0)
-//                LogEx.i("dequeueInputBuffer idx[$idx]")
 
             if (idx >= 0) {
-                _availInBufIdxArray!!.add(idx)
-                LogEx.d("availInBufIdxArray.add(idx[${idx}])")
+                idxQueue.add(idx)
+                LogEx.d("idxQueue.add(idx[${idx}])")
             } else {
 //                    LogEx.w("dequeueInputBuffer idx[$idx] break")
                 break
             }
         }
 
-        repeat(_availInBufIdxArray!!.size) {
+        for (i in 0 until idxQueue.size) {
             if (!_isPlaying)
                 return ReturnCodes.STOP
 
-            val index = _availInBufIdxArray!!.remove()
+            val index = idxQueue.remove()
             val buf = _vCodec!!.getInputBuffer(index)
             var readSize = _extractor!!.readSampleData(buf!!, 0)
             var flags = _extractor!!.sampleFlags
@@ -99,7 +106,7 @@ class MyVideoPlayer {
                 flags = flags or MediaCodec.BUFFER_FLAG_END_OF_STREAM
             }
 
-            LogEx.i("queueInputBuffer index[${index}] readSize[${readSize}] pts[${pts}]")
+            LogEx.d("queueInputBuffer index[${index}] readSize[${readSize}] pts[${pts}]")
             _vCodec!!.queueInputBuffer(index, 0, readSize, pts, flags)
             _extractor!!.advance()
         }
@@ -108,6 +115,8 @@ class MyVideoPlayer {
     }
 
     fun processCodecOutputBuffer() {
+        val idxBufferInfoQueue = ArrayDeque<Pair<Int, MediaCodec.BufferInfo>>()
+
         while (true) {
             if (!_isPlaying)
                 return
@@ -115,25 +124,35 @@ class MyVideoPlayer {
             val info = MediaCodec.BufferInfo()
             val idx = _vCodec!!.dequeueOutputBuffer(info, 0)
 
-//                LogEx.i("dequeueOutputBuffer idx[$idx] pts[${info.presentationTimeUs}]")
 
             if (idx >= 0) {
-                _availOutBufIdxArray!!.add(idx)
-                LogEx.d("availOutBufIdxArray.add(idx[${idx}])")
+                LogEx.d("dequeueOutputBuffer idx[$idx] pts[${info.presentationTimeUs}]")
+                idxBufferInfoQueue.add(Pair(idx, info))
+                LogEx.d("idxBufferInfoQueue.add(idx[${idx}], info[${info}])")
             } else {
 //                    LogEx.w("dequeueOutputBuffer idx[$idx] break")
                 break
             }
         }
 
-        repeat(_availOutBufIdxArray!!.size) {
+
+        for (i in 0 until idxBufferInfoQueue.size) {
             if (!_isPlaying)
                 return
 
-            val index = _availOutBufIdxArray!!.remove()
-            LogEx.i("releaseOutputBuffer index[${index}]")
-            _vCodec!!.releaseOutputBuffer(index, true)
+            val pair = idxBufferInfoQueue.remove()
+            val idx = pair.first
+            val bufInfo = pair.second
+            LogEx.d("releaseOutputBuffer idx[${idx}], bufInfo[${bufInfo}]")
+            val waitTimeMs = _getWaitTimeMs(bufInfo)
+
+            if (waitTimeMs > 0) {
+                runBlocking { delay(waitTimeMs) }
+            }
+
+            _vCodec!!.releaseOutputBuffer(idx, true)
         }
+
     }
 
     fun stop() {
@@ -144,8 +163,18 @@ class MyVideoPlayer {
         _vCodec!!.stop()
         _vCodec!!.release()
         _vCodec = null
-        _availInBufIdxArray = null
-        _availOutBufIdxArray = null
         _extractor = null
+        _lastRenderUs = 0
+        _videoDurationUs = 0
+        this.speedRatio = 1.0
+    }
+
+    private fun _getWaitTimeMs(lastFrameBufferInfo: MediaCodec.BufferInfo): Long {
+        val nowUs = System.nanoTime() / 1_000
+        val waitTimeUs = (1_000_000 / _fps) * (1 / this.speedRatio) - (nowUs - _lastRenderUs)
+        _lastRenderUs = nowUs
+        val waitTimeMs = (waitTimeUs / 1_000).toLong()
+        LogEx.value("waitTimeMs", waitTimeMs)
+        return waitTimeMs
     }
 }
