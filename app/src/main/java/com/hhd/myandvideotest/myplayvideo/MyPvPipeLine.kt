@@ -1,13 +1,33 @@
 package com.hhd.myandvideotest.myplayvideo
 
-import android.media.MediaCodec
 import android.view.Surface
+import com.hhd.myandvideotest.util.LogEx
 import com.hhd.myandvideotest.util.MyUtil
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.subjects.PublishSubject
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 class MyPvPipeLine {
+
+    var isOpen: Boolean = false
+        get() {
+            if (_myVideoPlayer == null)
+                return false
+
+            return true
+        }
+        private set
+
+    var isPlay: Boolean = false
+        get() {
+            if (_myVideoPlayer == null)
+                return false
+
+            return _myVideoPlayer!!.isPlay
+        }
+        private set
 
     var speedRatio: Double
         get() {
@@ -23,65 +43,104 @@ class MyPvPipeLine {
             _myVideoPlayer!!.speedRatio = value
         }
 
+    var duration: Long = -1L
+        get() {
+            if (_myVideoPlayer == null)
+                return -1L
+
+            return _myVideoPlayer!!.videoDurationUs
+        }
+        private set
+
+    var curPts: Long = -1L
+        get() {
+            if (_myVideoPlayer == null)
+                return -1L
+
+            return _myVideoPlayer!!.curPts
+        }
+        private set
+
+
     private var _myVideoPlayer: MyVideoPlayer? = null
     private val _pipeline = PublishSubject.create<Array<Any>>()
 
     private enum class _Commands {
         NONE,
-        PLAY,
-        PROCESS_INPUT_BUFFER,
-        PROCESS_OUTPUT_BUFFER,
-        STOP,
-        PAUSE,
-        RESUME,
+        OPEN,
+        CLOSE,
+        SEEK,
+        DECODE_RENDER,
+        UPDATE_UI,
     }
 
 
-    constructor() {
+    constructor(updateUiCb: (MyPvPipeLine) -> Unit) {
         _pipeline
-            .observeOn(MyUtil.newNamedScheduler("T_START_IN_BUF"))
+            .observeOn(MyUtil.newNamedScheduler("T_PLAYER"))
             .map {
                 val paramArray = it as Array<*>
                 val cmd = paramArray[0] as _Commands
+
                 when (cmd) {
-                    _Commands.PLAY -> {
+                    _Commands.OPEN -> {
                         val srcFile = paramArray[1] as File
                         val renderSurface = paramArray[2] as Surface
                         _myVideoPlayer = MyVideoPlayer()
-                        _myVideoPlayer!!.play(srcFile, renderSurface)
-                        _pipeline.onNext(arrayOf(_Commands.PROCESS_INPUT_BUFFER))
+                        _myVideoPlayer!!.prepare(srcFile, renderSurface)
+                        _myVideoPlayer!!.seek(0)
+                        _myVideoPlayer!!.decodeRender()
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                    _Commands.STOP -> {
+                    _Commands.CLOSE -> {
+                        if (_myVideoPlayer == null)
+                            return@map null
+
+                        _myVideoPlayer!!.stop()
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                    }
+                    _Commands.SEEK -> {
                         if (_myVideoPlayer == null)
                             return@map paramArray
 
-                        _myVideoPlayer!!.stop()
+                        val pts = paramArray[1] as Long
+                        _myVideoPlayer!!.seek(pts)
+                        _myVideoPlayer!!.decodeRender()
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                    _Commands.PROCESS_INPUT_BUFFER -> {
-                        val res = _myVideoPlayer!!.processCodecInputBuffer()
+                    _Commands.DECODE_RENDER -> {
+                        if (_myVideoPlayer == null)
+                            return@map paramArray
 
-                        when (res) {
-                            MyVideoPlayer.ReturnCodes.CONTINUE ->
-                                _pipeline.onNext(arrayOf(_Commands.PROCESS_OUTPUT_BUFFER))
+                        if (!_myVideoPlayer!!.isPlay)
+                            return@map paramArray
 
-                            MyVideoPlayer.ReturnCodes.EOS ->
-                                _pipeline.onNext(arrayOf(_Commands.STOP))
+                        val res = _myVideoPlayer!!.decodeRender()
 
-                            MyVideoPlayer.ReturnCodes.STOP -> {
-                            }
+                        if (!res)
+                            return@map paramArray
+
+                        val waitTimeMs = _myVideoPlayer!!.getWaitTimeMs()
+
+                        if (waitTimeMs > 0) {
+                            runBlocking { delay(waitTimeMs) }
                         }
+
+                        _myVideoPlayer!!.advance()
+                        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER))
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                 }
                 return@map paramArray
             }
-            .observeOn(MyUtil.newNamedScheduler("T_OUT_BUF"))
+            .observeOn(AndroidSchedulers.mainThread())
             .map {
                 val paramArray = it as Array<*>
                 val cmd = paramArray[0] as _Commands
+
                 when (cmd) {
-                    _Commands.PROCESS_OUTPUT_BUFFER -> {
-                        _myVideoPlayer!!.processCodecOutputBuffer()
-                        _pipeline.onNext(arrayOf(_Commands.PROCESS_INPUT_BUFFER))
+                    _Commands.UPDATE_UI -> {
+                        updateUiCb(this)
                     }
                 }
                 return@map paramArray
@@ -91,18 +150,37 @@ class MyPvPipeLine {
     }
 
 
-    fun play(srcFile: File, renderSurface: Surface) {
+    fun open(srcFile: File, renderSurface: Surface) {
         _pipeline.onNext(
             arrayOf(
-                _Commands.PLAY,
+                _Commands.OPEN,
                 srcFile,
                 renderSurface
             )
         )
     }
 
-    fun stop() {
-        _pipeline.onNext(arrayOf(_Commands.STOP))
+    fun close() {
+        _pipeline.onNext(arrayOf(_Commands.CLOSE))
+    }
+
+    fun seek(pts: Long) {
+        _pipeline.onNext(arrayOf(_Commands.SEEK, pts))
+    }
+
+    fun play() {
+        if (_myVideoPlayer == null)
+            return
+
+        _myVideoPlayer!!.isPlay = true
+        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER))
+    }
+
+    fun pause() {
+        if (_myVideoPlayer == null)
+            return
+
+        _myVideoPlayer!!.isPlay = false
     }
 }
 

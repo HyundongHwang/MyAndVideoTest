@@ -61,11 +61,11 @@ class MyCrPipeLine {
 
                         _camera!!.startPreview(
                             _renderer!!.textureId,
-                            { st ->
+                            {
                                 _pipeline.onNext(
                                     arrayOf(
                                         _Commands.FRAME_AVAILABLE,
-                                        st
+                                        it
                                     )
                                 )
                             })

@@ -5,16 +5,18 @@ import android.os.Environment
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
 import com.hhd.myandvideotest.R
+import com.hhd.myandvideotest.util.LogEx
 import com.hhd.myandvideotest.util.MyActivityUtil
 import kotlinx.android.synthetic.main.my_play_video_activity.*
 import java.io.File
 
 class MyPlayVideoActivity : AppCompatActivity() {
 
-    private var _isPlaying: Boolean = false
-    private val _pipeline = MyPvPipeLine()
+    private val _pipeline = MyPvPipeLine({ _updateUi(it) })
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,7 +42,22 @@ class MyPlayVideoActivity : AppCompatActivity() {
             ArrayAdapter(
                 this,
                 android.R.layout.simple_spinner_dropdown_item,
-                listOf("x1", "x2", "x5", "x10", "x0.5", "x0.3", "x0.1")
+                listOf(
+                    "x1",
+                    "x2",
+                    "x5",
+                    "x10",
+                    "x0.5",
+                    "x0.3",
+                    "x0.1",
+                    "x-1",
+                    "x-2",
+                    "x-5",
+                    "x-10",
+                    "x-0.5",
+                    "x-0.3",
+                    "x-0.1"
+                )
             )
 
         this.sp_speed_ratio.setOnItemSelectedListener(object : AdapterView.OnItemSelectedListener {
@@ -57,41 +74,93 @@ class MyPlayVideoActivity : AppCompatActivity() {
             }
         })
 
-        this.btn_play_stop.setOnClickListener { _btn_play_stop_click() }
+        this.btn_open_close.setOnClickListener { _btn_open_close_click() }
+        this.btn_play_pause.setOnClickListener { _btn_play_pause_click() }
+
+        this.sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser)
+                    _sb_progress_change_fromUser(progress, seekBar!!.max)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+            }
+        })
     }
 
-    private fun _sp_speed_ratio_itemselected() {
-        _pipeline.speedRatio = (this.sp_speed_ratio.selectedItem as String).trimStart('x').toDouble()
+    private fun _sb_progress_change_fromUser(progress: Int, max: Int) {
+        _pipeline.pause()
+        val pts = progress * 1_000_000L
+        _pipeline.seek(pts)
     }
 
-    private fun _btn_play_stop_click() {
-        if (_isPlaying) {
-            _stop()
+    private fun _btn_play_pause_click() {
+        if (_pipeline.isPlay) {
+            _pipeline.pause()
         } else {
-            _play()
+            _pipeline.play()
         }
     }
 
-    private fun _play() {
+
+    private fun _btn_open_close_click() {
+        if (_pipeline.isOpen) {
+            _close()
+        } else {
+            _open()
+        }
+    }
+
+    private fun _open() {
         val srcFile = File(
             Environment.getExternalStorageDirectory(),
             this.sp_video_file.selectedItem as String
         )
 
-        _pipeline.play(srcFile, this.sv.holder.surface)
-        this.btn_play_stop.text = "stop"
-        _isPlaying = true
+        _pipeline.open(srcFile, this.sv.holder.surface)
     }
+
+    private fun _close() {
+        _pipeline.close()
+    }
+
+    private fun _sp_speed_ratio_itemselected() {
+        _pipeline.speedRatio =
+            (this.sp_speed_ratio.selectedItem as String).trimStart('x').toDouble()
+    }
+
 
     override fun onPause() {
         super.onPause()
-        _stop()
+        _close()
     }
 
-    private fun _stop() {
-        _pipeline.stop()
-        this.btn_play_stop.text = "play"
-        _isPlaying = false
+    private fun _updateUi(pipeline: MyPvPipeLine) {
+        var curPts_s = pipeline.curPts.toDouble() / 1_000_000
+        var duration_s = pipeline.duration.toDouble() / 1_000_000
+
+        this.tv_seek.text =
+            "${String.format("%.1f", curPts_s)}s : " +
+                    "${String.format("%.1f", duration_s)}s " +
+                    "${String.format("%.0f", curPts_s * 100 / duration_s)} %"
+
+        this.sb.max = duration_s.toInt()
+        this.sb.progress = curPts_s.toInt()
+
+        if (pipeline.isOpen) {
+            this.btn_open_close.text = "close"
+        } else {
+            this.btn_open_close.text = "open"
+        }
+
+        if (pipeline.isPlay) {
+            this.btn_play_pause.text = "pause"
+        } else {
+            this.btn_play_pause.text = "play"
+        }
     }
 }
 
