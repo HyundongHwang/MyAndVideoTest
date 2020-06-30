@@ -8,6 +8,7 @@ import com.hhd.myandvideotest.util.LogEx
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import kotlin.math.max
 import kotlin.math.min
 
 
@@ -136,7 +137,8 @@ class MyVideoPlayer {
         LogEx.d(
             "OUTBUF " +
                     "idx[${idx}] " +
-                    "pts[${info.presentationTimeUs}] " +
+                    "inBufPts[${pts}] " +
+                    "outBufPts[${info.presentationTimeUs}] " +
                     "size[${info.size}]" +
                     "flags[${info.flags}] " +
                     "render[${render}]"
@@ -144,7 +146,7 @@ class MyVideoPlayer {
 
         if (render) {
             _lastRenderTimeUs = System.nanoTime() / 1_000
-            this.curPts = info.presentationTimeUs
+            this.curPts = pts
         }
 
         _vCodec!!.releaseOutputBuffer(idx, render)
@@ -178,102 +180,107 @@ class MyVideoPlayer {
         _extractor!!.advance()
     }
 
-    fun decodeRenderReverse(keyFramePts: Long, renderCb : () -> Unit): Long {
-        var kfPts = -1L
+    fun decodeReverse(pts: Long): Pair<MutableList<Pair<Int, Long>>, Long> {
+        var targetPts = -1L
 
-        if (keyFramePts >= 0) {
-            kfPts = keyFramePts
+        if (pts >= 0) {
+            targetPts = pts
         } else {
-            kfPts = _videoFrameIndexMap!!.last().first()
+            targetPts = _videoFrameIndexMap!!.last().last()
         }
 
-        val ptsInGopList = _videoFrameIndexMap!!.first { it.first() == kfPts }
+        val ptsInGopList =
+            _videoFrameIndexMap!!.first { it.first() <= targetPts && targetPts <= it.last() }
         val keyFramePts = ptsInGopList.first()
-        LogEx.d("kfPts[${kfPts}]")
+        val targetIdx = ptsInGopList.indexOf(targetPts)
+        val subGopFirstIdx = max(targetIdx - _maxVcodecBufSize + 1, 0)
+        val subGopSize = targetIdx - subGopFirstIdx + 1
 
-        for (j in (ptsInGopList.size - 1) / _maxVcodecBufSize downTo 0) {
-            val subGopFirstIdx = j * _maxVcodecBufSize
-            val subGopSize = min(ptsInGopList.size - subGopFirstIdx, _maxVcodecBufSize)
-            LogEx.d("subGopFirstIdx[${subGopFirstIdx}] subGopSize[${subGopSize}]")
+        _extractor!!.seekTo(keyFramePts, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
 
-            _extractor!!.seekTo(keyFramePts, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+        repeat(subGopFirstIdx) {
+            this.decodeRender(false)
+            _extractor!!.advance()
+        }
 
-            repeat(subGopFirstIdx) {
-                this.decodeRender(false)
-                _extractor!!.advance()
+        val inBufIdxList = mutableListOf<Int>()
+
+        repeat(subGopSize) {
+            val idx = _vCodec!!.dequeueInputBuffer(0)
+
+            if (idx >= 0) {
+                inBufIdxList.add(idx)
+                LogEx.d("dequeueInputBuffer idx[${idx}]")
+            }
+        }
+
+        val inBufIdxPtsList = mutableListOf<Pair<Int, Long>>()
+
+        for (idx in inBufIdxList) {
+            val buf = _vCodec!!.getInputBuffer(idx)
+            var readSize = _extractor!!.readSampleData(buf!!, 0)
+            var flags = _extractor!!.sampleFlags
+            var pts = _extractor!!.sampleTime
+
+            if (readSize <= 0) {
+                readSize = 0
+                pts = 0
+                flags = flags or MediaCodec.BUFFER_FLAG_END_OF_STREAM
             }
 
-            val inBufIdxList = mutableListOf<Int>()
+            LogEx.d("queueInputBuffer idx[${idx}] pts[${pts}] readSize[${readSize}]")
+            _vCodec!!.queueInputBuffer(idx, 0, readSize, pts, flags)
+            _extractor!!.advance()
+            inBufIdxPtsList.add(Pair(idx, pts))
+        }
 
+        val outBufIdxList = mutableListOf<Int>()
+
+        while (true) {
             repeat(subGopSize) {
-                val idx = _vCodec!!.dequeueInputBuffer(0)
+                val info = MediaCodec.BufferInfo()
+                val idx = _vCodec!!.dequeueOutputBuffer(info, 0)
 
                 if (idx >= 0) {
-                    inBufIdxList.add(idx)
-                    LogEx.d("dequeueInputBuffer idx[${idx}]")
+                    LogEx.d("dequeueOutputBuffer idx[$idx] pts[${info.presentationTimeUs}]")
+                    outBufIdxList.add(idx)
                 }
             }
 
-            val inBufIdxPtsList = mutableListOf<Pair<Int, Long>>()
-
-            for (idx in inBufIdxList) {
-                val buf = _vCodec!!.getInputBuffer(idx)
-                var readSize = _extractor!!.readSampleData(buf!!, 0)
-                var flags = _extractor!!.sampleFlags
-                var pts = _extractor!!.sampleTime
-
-                if (readSize <= 0) {
-                    readSize = 0
-                    pts = 0
-                    flags = flags or MediaCodec.BUFFER_FLAG_END_OF_STREAM
-                }
-
-                LogEx.d("queueInputBuffer idx[${idx}] pts[${pts}] readSize[${readSize}]")
-                _vCodec!!.queueInputBuffer(idx, 0, readSize, pts, flags)
-                _extractor!!.advance()
-                inBufIdxPtsList.add(Pair(idx, pts))
-            }
-
-            val outBufIdxList = mutableListOf<Int>()
-
-            while (true) {
-                repeat(subGopSize) {
-                    val info = MediaCodec.BufferInfo()
-                    val idx = _vCodec!!.dequeueOutputBuffer(info, 0)
-
-                    if (idx >= 0) {
-                        LogEx.d("dequeueOutputBuffer idx[$idx] pts[${info.presentationTimeUs}]")
-                        outBufIdxList.add(idx)
-                    }
-                }
-
-                if (outBufIdxList.size == subGopSize) {
-                    break
-                } else {
-                    runBlocking { delay(10) }
-                }
-            }
-
-            for (i in outBufIdxList.size - 1 downTo 0) {
-                val idx = outBufIdxList[i]
-                val pts = inBufIdxPtsList[i].second
-                LogEx.d("releaseOutputBuffer idx[$idx] pts[${pts}]")
-                this.curPts = pts
-                _vCodec!!.releaseOutputBuffer(idx, true)
-                renderCb()
+            if (outBufIdxList.size == subGopSize) {
+                break
+            } else {
+                runBlocking { delay(10) }
             }
         }
 
-        _vCodec!!.flush()
+        val outBufIdxPtsList = mutableListOf<Pair<Int, Long>>()
 
-        var nextKfPts = -1L
-        val idx = _videoFrameIndexMap!!.indexOf(ptsInGopList)
-
-        if (idx > 0) {
-            nextKfPts = _videoFrameIndexMap!![idx - 1].first()
+        for (i in outBufIdxList.size - 1 downTo 0) {
+            val idx = outBufIdxList[i]
+            val pts = inBufIdxPtsList[i].second
+            outBufIdxPtsList.add(Pair(idx, pts))
         }
 
-        return nextKfPts
+        var prevPts = -1L
+
+        if (subGopFirstIdx > 0) {
+            prevPts = ptsInGopList[subGopFirstIdx - 1]
+        } else {
+            val curPtsGopIdx = _videoFrameIndexMap!!.indexOf(ptsInGopList)
+
+            if (curPtsGopIdx > 0)
+                prevPts = _videoFrameIndexMap!![curPtsGopIdx - 1].last()
+        }
+
+        return Pair(outBufIdxPtsList, prevPts)
+    }
+
+    fun renderIdxOutBuf(idxOutBuf: Int, pts: Long) {
+        LogEx.d("releaseOutputBuffer idx[$idxOutBuf] pts[${pts}]")
+        _lastRenderTimeUs = System.nanoTime() / 1_000
+        this.curPts = pts
+        _vCodec!!.releaseOutputBuffer(idxOutBuf, true)
     }
 
     fun test() {

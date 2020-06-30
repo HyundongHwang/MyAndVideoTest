@@ -86,6 +86,7 @@ class MyPvPipeLine {
         SEEK,
         DECODE_RENDER,
         DECODE_RENDER_REVERSE,
+        RENDER_IDX_OUT_BUF,
         UPDATE_UI,
         TEST,
     }
@@ -165,20 +166,37 @@ class MyPvPipeLine {
                         if (!_myVideoPlayer!!.isPlay)
                             return@map paramArray
 
-                        val keyFramePts = paramArray[1] as Long
+                        val curPts = paramArray[1] as Long
+                        val pair = _myVideoPlayer!!.decodeReverse(curPts)
+                        val outBufIdxPtsList = pair.first
+                        val prevPts = pair.second
 
-                        val resKeyFramePts = _myVideoPlayer!!.decodeRenderReverse(keyFramePts, {
-                            _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
-                        })
+                        for (pair in outBufIdxPtsList) {
+                            val idx = pair.first
+                            val pts = pair.second
+                            _pipeline.onNext(arrayOf(_Commands.RENDER_IDX_OUT_BUF, idx, pts))
+                        }
 
-                        if (resKeyFramePts >= 0)
-                            _pipeline.onNext(
-                                arrayOf(
-                                    _Commands.DECODE_RENDER_REVERSE,
-                                    resKeyFramePts
-                                )
-                            )
+                        if (prevPts >= 0)
+                            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE, prevPts))
 
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                    }
+                    _Commands.RENDER_IDX_OUT_BUF -> {
+                        if (_myVideoPlayer == null)
+                            return@map paramArray
+
+                        if (!_myVideoPlayer!!.isPlay)
+                            return@map paramArray
+
+                        val idx = paramArray[1] as Int
+                        val pts = paramArray[2] as Long
+                        val waitTimeMs = _myVideoPlayer!!.getWaitTimeMs()
+
+                        if (waitTimeMs > 0)
+                            runBlocking { delay(waitTimeMs) }
+
+                        _myVideoPlayer!!.renderIdxOutBuf(idx, pts)
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.TEST -> {
@@ -220,7 +238,11 @@ class MyPvPipeLine {
         _myVideoPlayer!!.isPlay = true
 
         if (_myVideoPlayer!!.isReverse) {
-            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE, -1L))
+            if (this.curPts == 0L) {
+                _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE, -1L))
+            } else {
+                _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE, this.curPts))
+            }
         } else {
             _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER))
         }

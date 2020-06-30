@@ -85,26 +85,6 @@ class MyPlayVideoActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
             }
         })
-
-        this.sv.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceChanged(
-                holder: SurfaceHolder?,
-                format: Int,
-                width: Int,
-                height: Int
-            ) {
-                LogEx.d("")
-            }
-
-            override fun surfaceDestroyed(holder: SurfaceHolder?) {
-                LogEx.d("")
-            }
-
-            override fun surfaceCreated(holder: SurfaceHolder?) {
-                LogEx.d("")
-            }
-
-        })
     }
 
     private fun _btn_test_click() {
