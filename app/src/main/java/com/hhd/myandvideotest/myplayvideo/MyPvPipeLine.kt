@@ -61,6 +61,20 @@ class MyPvPipeLine {
         }
         private set
 
+    var isReverse: Boolean
+        get() {
+            if (_myVideoPlayer == null)
+                return false
+
+            return _myVideoPlayer!!.isReverse
+        }
+        set(value) {
+            if (_myVideoPlayer == null)
+                return
+
+            _myVideoPlayer!!.isReverse = value
+        }
+
 
     private var _myVideoPlayer: MyVideoPlayer? = null
     private val _pipeline = PublishSubject.create<Array<Any>>()
@@ -71,12 +85,26 @@ class MyPvPipeLine {
         CLOSE,
         SEEK,
         DECODE_RENDER,
+        DECODE_RENDER_REVERSE,
         UPDATE_UI,
+        TEST,
     }
 
 
     constructor(updateUiCb: (MyPvPipeLine) -> Unit) {
         _pipeline
+            .observeOn(AndroidSchedulers.mainThread())
+            .map {
+                val paramArray = it as Array<*>
+                val cmd = paramArray[0] as _Commands
+
+                when (cmd) {
+                    _Commands.UPDATE_UI -> {
+                        updateUiCb(this)
+                    }
+                }
+                return@map paramArray
+            }
             .observeOn(MyUtil.newNamedScheduler("T_PLAYER"))
             .map {
                 val paramArray = it as Array<*>
@@ -89,7 +117,7 @@ class MyPvPipeLine {
                         _myVideoPlayer = MyVideoPlayer()
                         _myVideoPlayer!!.prepare(srcFile, renderSurface)
                         _myVideoPlayer!!.seek(0)
-                        _myVideoPlayer!!.decodeRender()
+                        _myVideoPlayer!!.decodeRender(true)
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.CLOSE -> {
@@ -97,6 +125,7 @@ class MyPvPipeLine {
                             return@map null
 
                         _myVideoPlayer!!.stop()
+                        _myVideoPlayer = null
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.SEEK -> {
@@ -105,7 +134,7 @@ class MyPvPipeLine {
 
                         val pts = paramArray[1] as Long
                         _myVideoPlayer!!.seek(pts)
-                        _myVideoPlayer!!.decodeRender()
+                        _myVideoPlayer!!.decodeRender(true)
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.DECODE_RENDER -> {
@@ -115,32 +144,48 @@ class MyPvPipeLine {
                         if (!_myVideoPlayer!!.isPlay)
                             return@map paramArray
 
-                        val res = _myVideoPlayer!!.decodeRender()
+                        val res = _myVideoPlayer!!.decodeRender(true)
 
                         if (!res)
                             return@map paramArray
 
                         val waitTimeMs = _myVideoPlayer!!.getWaitTimeMs()
 
-                        if (waitTimeMs > 0) {
+                        if (waitTimeMs > 0)
                             runBlocking { delay(waitTimeMs) }
-                        }
 
                         _myVideoPlayer!!.advance()
                         _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER))
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                }
-                return@map paramArray
-            }
-            .observeOn(AndroidSchedulers.mainThread())
-            .map {
-                val paramArray = it as Array<*>
-                val cmd = paramArray[0] as _Commands
+                    _Commands.DECODE_RENDER_REVERSE -> {
+                        if (_myVideoPlayer == null)
+                            return@map paramArray
 
-                when (cmd) {
-                    _Commands.UPDATE_UI -> {
-                        updateUiCb(this)
+                        if (!_myVideoPlayer!!.isPlay)
+                            return@map paramArray
+
+                        val keyFramePts = paramArray[1] as Long
+
+                        val resKeyFramePts = _myVideoPlayer!!.decodeRenderReverse(keyFramePts, {
+                            _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                        })
+
+                        if (resKeyFramePts >= 0)
+                            _pipeline.onNext(
+                                arrayOf(
+                                    _Commands.DECODE_RENDER_REVERSE,
+                                    resKeyFramePts
+                                )
+                            )
+
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                    }
+                    _Commands.TEST -> {
+                        if (_myVideoPlayer == null)
+                            return@map paramArray
+
+                        _myVideoPlayer!!.test()
                     }
                 }
                 return@map paramArray
@@ -173,7 +218,12 @@ class MyPvPipeLine {
             return
 
         _myVideoPlayer!!.isPlay = true
-        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER))
+
+        if (_myVideoPlayer!!.isReverse) {
+            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE, -1L))
+        } else {
+            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER))
+        }
     }
 
     fun pause() {
@@ -181,6 +231,10 @@ class MyPvPipeLine {
             return
 
         _myVideoPlayer!!.isPlay = false
+    }
+
+    fun test() {
+        _pipeline.onNext(arrayOf(_Commands.TEST))
     }
 }
 

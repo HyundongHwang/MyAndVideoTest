@@ -2,6 +2,8 @@ package com.hhd.myandvideotest.myplayvideo
 
 import android.os.Bundle
 import android.os.Environment
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -49,14 +51,7 @@ class MyPlayVideoActivity : AppCompatActivity() {
                     "x10",
                     "x0.5",
                     "x0.3",
-                    "x0.1",
-                    "x-1",
-                    "x-2",
-                    "x-5",
-                    "x-10",
-                    "x-0.5",
-                    "x-0.3",
-                    "x-0.1"
+                    "x0.1"
                 )
             )
 
@@ -76,6 +71,7 @@ class MyPlayVideoActivity : AppCompatActivity() {
 
         this.btn_open_close.setOnClickListener { _btn_open_close_click() }
         this.btn_play_pause.setOnClickListener { _btn_play_pause_click() }
+        this.btn_test.setOnClickListener { _btn_test_click() }
 
         this.sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -89,6 +85,30 @@ class MyPlayVideoActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
             }
         })
+
+        this.sv.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceChanged(
+                holder: SurfaceHolder?,
+                format: Int,
+                width: Int,
+                height: Int
+            ) {
+                LogEx.d("")
+            }
+
+            override fun surfaceDestroyed(holder: SurfaceHolder?) {
+                LogEx.d("")
+            }
+
+            override fun surfaceCreated(holder: SurfaceHolder?) {
+                LogEx.d("")
+            }
+
+        })
+    }
+
+    private fun _btn_test_click() {
+        _pipeline.test()
     }
 
     private fun _sb_progress_change_fromUser(progress: Int, max: Int) {
@@ -101,6 +121,9 @@ class MyPlayVideoActivity : AppCompatActivity() {
         if (_pipeline.isPlay) {
             _pipeline.pause()
         } else {
+            _pipeline.speedRatio =
+                (this.sp_speed_ratio.selectedItem as String).trimStart('x').toDouble()
+            _pipeline.isReverse = this.cb_reverse.isChecked
             _pipeline.play()
         }
     }
@@ -163,6 +186,3 @@ class MyPlayVideoActivity : AppCompatActivity() {
         }
     }
 }
-
-
-

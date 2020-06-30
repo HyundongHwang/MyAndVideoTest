@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
@@ -36,10 +37,11 @@
             android:text="0s : 100s (0%)"
             android:textAlignment="textEnd" />
 
-        <LinearLayout
+        <com.google.android.flexbox.FlexboxLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            app:flexWrap="wrap">
+
 
             <Button
                 android:id="@+id/btn_open_close"
@@ -57,6 +59,14 @@
                 android:text="play"
                 android:textAllCaps="false" />
 
+            <CheckBox
+                android:id="@+id/cb_reverse"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="5dp"
+                android:checked="false"
+                android:text="reverse" />
+
             <Spinner
                 android:id="@+id/sp_speed_ratio"
                 android:layout_width="wrap_content"
@@ -64,8 +74,31 @@
                 android:layout_margin="5dp"
                 android:spinnerMode="dialog" />
 
-        </LinearLayout>
+            <Button
+                android:id="@+id/btn_frame_prev"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="5dp"
+                android:text="frame prev"
+                android:textAllCaps="false" />
 
+            <Button
+                android:id="@+id/btn_frame_next"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="5dp"
+                android:text="frame next"
+                android:textAllCaps="false" />
+
+            <Button
+                android:id="@+id/btn_test"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="5dp"
+                android:text="test"
+                android:textAllCaps="false" />
+
+        </com.google.android.flexbox.FlexboxLayout>
 
     </LinearLayout>
 
