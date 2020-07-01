@@ -9,25 +9,36 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.math.max
-import kotlin.math.min
 
 
 class MyVideoPlayer {
 
+
     var curPts: Long = -1L
         private set
 
+    var width: Int = -1
+        private set
+
+    var height: Int = -1
+        private set
+
+    var rotation: Int = 0
+        private set
+
+    var durationUs: Long = -1L
     var fps: Int = -1
     var isPlay = false
     var isReverse = false
     var speedRatio = 1.0
-    var videoDurationUs: Long = -1L
+
 
     private var _extractor: MediaExtractor? = null
     private var _lastRenderTimeUs: Long = -1L
     private var _maxVcodecBufSize = 0
     private var _vCodec: MediaCodec? = null
     private var _videoFrameIndexMap: MutableList<MutableList<Long>>? = null
+
 
     fun prepare(srcFile: File, renderSurface: Surface) {
         _extractor = MediaExtractor()
@@ -46,7 +57,16 @@ class MyVideoPlayer {
                 _extractor!!.selectTrack(i)
                 _vCodec = MediaCodec.createDecoderByType(mime)
                 _vCodec!!.configure(fmt, renderSurface, null, 0)
-                this.videoDurationUs = fmt.getLong(MediaFormat.KEY_DURATION)
+                this.durationUs = fmt.getLong(MediaFormat.KEY_DURATION)
+                this.width = fmt.getInteger(MediaFormat.KEY_WIDTH)
+                this.height = fmt.getInteger(MediaFormat.KEY_HEIGHT)
+
+                try {
+                    this.rotation = fmt.getInteger(MediaFormat.KEY_ROTATION)
+                } catch (ex: Exception) {
+                    this.rotation = 0
+                }
+
                 this.fps = fmt.getInteger(MediaFormat.KEY_FRAME_RATE)
                 break
             }
@@ -81,8 +101,67 @@ class MyVideoPlayer {
         _extractor!!.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
     }
 
+    fun seekPrevFrame() {
+        val ptsInGopList = _videoFrameIndexMap!!.first { this.curPts <= it.last() }
+        val idxPts = ptsInGopList.indexOf(this.curPts)
+        var prevPts = 0L
+
+        if (idxPts > 0) {
+            prevPts = ptsInGopList[idxPts - 1]
+        } else {
+            val idxList = _videoFrameIndexMap!!.indexOf(ptsInGopList)
+
+            if (idxList > 0) {
+                prevPts = _videoFrameIndexMap!![idxList - 1].last()
+            }
+        }
+
+        this.seek(prevPts)
+    }
+
     fun seek(pts: Long) {
-        _extractor!!.seekTo(pts, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+        val lastPts = _videoFrameIndexMap!!.last().last()
+
+        var caliPts = when {
+            pts < 0 -> {
+                0L
+            }
+            pts > lastPts -> {
+                lastPts
+            }
+            else -> {
+                pts
+            }
+        }
+
+        val ptsInGopList = _videoFrameIndexMap!!.first { caliPts <= it.last() }
+        var idxNear = 0
+
+        if (caliPts <= ptsInGopList.first()) {
+            caliPts = ptsInGopList.first()
+        } else if (caliPts >= ptsInGopList.last()) {
+            caliPts = ptsInGopList.last()
+        } else {
+            for (i in 0 until ptsInGopList.size - 1) {
+                if (ptsInGopList[i] <= caliPts && caliPts <= ptsInGopList[i + 1]) {
+                    caliPts = ptsInGopList[i]
+                    break
+                }
+            }
+        }
+
+        val keyFramePts = ptsInGopList.first()
+        val idx = ptsInGopList.indexOf(caliPts)
+        _extractor!!.seekTo(keyFramePts, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+
+        if (idx > 0) {
+            repeat(idx - 1) {
+                decodeRender(false)
+                _extractor!!.advance()
+            }
+        }
+
+        decodeRender(true)
     }
 
     fun decodeRender(render: Boolean): Boolean {
@@ -154,17 +233,30 @@ class MyVideoPlayer {
     }
 
     fun stop() {
-        _vCodec!!.stop()
-        _vCodec!!.release()
-        _vCodec = null
-        _extractor = null
-        _lastRenderTimeUs = 0
-        this.speedRatio = 1.0
         this.curPts = -1L
+        this.width = -1
+        this.height = -1
+        this.durationUs = -1L
         this.fps = -1
         this.isPlay = false
+        this.isReverse = false
         this.speedRatio = 1.0
-        this.videoDurationUs = -1L
+
+        if (_extractor != null) {
+            _extractor!!.release()
+            _extractor = null
+        }
+
+        _lastRenderTimeUs = -1L
+        _maxVcodecBufSize = 0
+
+        if (_vCodec != null) {
+            _vCodec!!.stop()
+            _vCodec!!.release()
+            _vCodec = null
+        }
+
+        _videoFrameIndexMap = null
     }
 
     fun getWaitTimeMs(): Long {
@@ -284,5 +376,6 @@ class MyVideoPlayer {
     }
 
     fun test() {
+        _vCodec!!.flush()
     }
 }

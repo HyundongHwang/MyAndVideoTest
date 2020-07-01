@@ -1,10 +1,11 @@
 package com.hhd.myandvideotest.myplayvideo
 
+import android.content.Context
+import android.graphics.Point
 import android.os.Bundle
 import android.os.Environment
-import android.view.SurfaceHolder
-import android.view.SurfaceView
 import android.view.View
+import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.SeekBar
@@ -12,12 +13,17 @@ import androidx.appcompat.app.AppCompatActivity
 import com.hhd.myandvideotest.R
 import com.hhd.myandvideotest.util.LogEx
 import com.hhd.myandvideotest.util.MyActivityUtil
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.subjects.PublishSubject
 import kotlinx.android.synthetic.main.my_play_video_activity.*
 import java.io.File
+import java.util.*
+import java.util.concurrent.TimeUnit
 
 class MyPlayVideoActivity : AppCompatActivity() {
 
     private val _pipeline = MyPvPipeLine({ _updateUi(it) })
+    private val _sb_ps = PublishSubject.create<Int>()
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,6 +91,34 @@ class MyPlayVideoActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
             }
         })
+
+        this.btn_frame_prev.setOnClickListener { _btn_frame_prev_click() }
+        this.btn_frame_next.setOnClickListener { _btn_frame_next_click() }
+
+        _sb_ps
+            .debounce(200, TimeUnit.MILLISECONDS)
+            .observeOn(AndroidSchedulers.mainThread())
+            .map {
+                val progress = it
+                _sb_ps_debounce(progress)
+                return@map Any()
+            }
+            .subscribe()
+    }
+
+    private fun _btn_frame_prev_click() {
+        _pipeline.decodeRenderPrevFrame()
+    }
+
+    private fun _sb_ps_debounce(progress: Int) {
+        LogEx.value("progress", progress)
+        _pipeline.pause()
+        val pts = progress * 1_000L
+        _pipeline.seek(pts)
+    }
+
+    private fun _btn_frame_next_click() {
+        _pipeline.decodeRenderNextFrame()
     }
 
     private fun _btn_test_click() {
@@ -92,9 +126,7 @@ class MyPlayVideoActivity : AppCompatActivity() {
     }
 
     private fun _sb_progress_change_fromUser(progress: Int, max: Int) {
-        _pipeline.pause()
-        val pts = progress * 1_000_000L
-        _pipeline.seek(pts)
+        _sb_ps.onNext(progress)
     }
 
     private fun _btn_play_pause_click() {
@@ -142,16 +174,44 @@ class MyPlayVideoActivity : AppCompatActivity() {
     }
 
     private fun _updateUi(pipeline: MyPvPipeLine) {
+        val winMgr = this.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val winSize = Point()
+        winMgr.defaultDisplay.getSize(winSize)
+
+        var vw = -1
+        var vh = -1
+
+        when (_pipeline.videoRotation) {
+            90, 270 -> {
+                vw = _pipeline.videoHeight
+                vh = _pipeline.videoWidth
+            }
+            else -> {
+                vw = _pipeline.videoWidth
+                vh = _pipeline.videoHeight
+            }
+        }
+
+        if (vw > 0 && vh > 0) {
+            if (vw > vh) { // landscape
+                this.sv.layoutParams.width = winSize.x
+                this.sv.layoutParams.height = winSize.x * vh / vw
+            } else { // portrait
+                this.sv.layoutParams.width = winSize.x * 2 / 3
+                this.sv.layoutParams.height = (winSize.x * 2 / 3) * vh / vw
+            }
+        }
+
         var curPts_s = pipeline.curPts.toDouble() / 1_000_000
-        var duration_s = pipeline.duration.toDouble() / 1_000_000
+        var duration_s = pipeline.durationUs.toDouble() / 1_000_000
 
         this.tv_seek.text =
             "${String.format("%.1f", curPts_s)}s : " +
                     "${String.format("%.1f", duration_s)}s " +
                     "${String.format("%.0f", curPts_s * 100 / duration_s)} %"
 
-        this.sb.max = duration_s.toInt()
-        this.sb.progress = curPts_s.toInt()
+        this.sb.max = (pipeline.durationUs / 1_000).toInt()
+        this.sb.progress = (pipeline.curPts / 1_000).toInt()
 
         if (pipeline.isOpen) {
             this.btn_open_close.text = "close"

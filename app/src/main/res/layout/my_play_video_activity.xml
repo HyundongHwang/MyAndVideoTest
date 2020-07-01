@@ -19,8 +19,8 @@
 
         <SurfaceView
             android:id="@+id/sv"
-            android:layout_width="300dp"
-            android:layout_height="533dp"
+            android:layout_width="100dp"
+            android:layout_height="100dp"
             android:layout_margin="5dp" />
 
         <SeekBar

@@ -1,7 +1,6 @@
 package com.hhd.myandvideotest.myplayvideo
 
 import android.view.Surface
-import com.hhd.myandvideotest.util.LogEx
 import com.hhd.myandvideotest.util.MyUtil
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.subjects.PublishSubject
@@ -43,12 +42,39 @@ class MyPvPipeLine {
             _myVideoPlayer!!.speedRatio = value
         }
 
-    var duration: Long = -1L
+    var durationUs: Long = -1L
         get() {
             if (_myVideoPlayer == null)
                 return -1L
 
-            return _myVideoPlayer!!.videoDurationUs
+            return _myVideoPlayer!!.durationUs
+        }
+        private set
+
+    var videoWidth: Int = -1
+        get() {
+            if (_myVideoPlayer == null)
+                return -1
+
+            return _myVideoPlayer!!.width
+        }
+        private set
+
+    var videoHeight: Int = -1
+        get() {
+            if (_myVideoPlayer == null)
+                return -1
+
+            return _myVideoPlayer!!.height
+        }
+        private set
+
+    var videoRotation: Int = 0
+        get() {
+            if (_myVideoPlayer == null)
+                return 0
+
+            return _myVideoPlayer!!.rotation
         }
         private set
 
@@ -85,7 +111,9 @@ class MyPvPipeLine {
         CLOSE,
         SEEK,
         DECODE_RENDER,
+        DECODE_RENDER_1FRAME,
         DECODE_RENDER_REVERSE,
+        DECODE_RENDER_1FRAME_REVERSE,
         RENDER_IDX_OUT_BUF,
         UPDATE_UI,
         TEST,
@@ -157,6 +185,21 @@ class MyPvPipeLine {
 
                         _myVideoPlayer!!.advance()
                         _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER))
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                    }
+                    _Commands.DECODE_RENDER_1FRAME -> {
+                        if (_myVideoPlayer == null)
+                            return@map paramArray
+
+                        _myVideoPlayer!!.decodeRender(true)
+                        _myVideoPlayer!!.advance()
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                    }
+                    _Commands.DECODE_RENDER_1FRAME_REVERSE -> {
+                        if (_myVideoPlayer == null)
+                            return@map paramArray
+
+                        _myVideoPlayer!!.seekPrevFrame()
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.DECODE_RENDER_REVERSE -> {
@@ -257,6 +300,16 @@ class MyPvPipeLine {
 
     fun test() {
         _pipeline.onNext(arrayOf(_Commands.TEST))
+    }
+
+    fun decodeRenderNextFrame() {
+        this.pause()
+        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME))
+    }
+
+    fun decodeRenderPrevFrame() {
+        this.pause()
+        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME_REVERSE))
     }
 }
 
