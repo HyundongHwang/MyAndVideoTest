@@ -30,14 +30,12 @@ class MyVideoPlayer {
     var fps: Int = -1
     var isPlay = false
     var isReverse = false
-    var speedRatio = 1.0
-
 
     private var _extractor: MediaExtractor? = null
     private var _lastRenderTimeUs: Long = -1L
-    private var _maxVcodecBufSize = 0
-    private var _vCodec: MediaCodec? = null
-    private var _videoFrameIndexMap: MutableList<MutableList<Long>>? = null
+    private var _maxCodecBufSize = 0
+    private var _decorder: MediaCodec? = null
+    private var _ptsGroupByGopList: MutableList<MutableList<Long>>? = null
 
 
     fun prepare(srcFile: File, renderSurface: Surface) {
@@ -55,8 +53,8 @@ class MyVideoPlayer {
             if (mime.contains("video/")) {
                 LogEx.value("fmt", fmt)
                 _extractor!!.selectTrack(i)
-                _vCodec = MediaCodec.createDecoderByType(mime)
-                _vCodec!!.configure(fmt, renderSurface, null, 0)
+                _decorder = MediaCodec.createDecoderByType(mime)
+                _decorder!!.configure(fmt, renderSurface, null, 0)
                 this.durationUs = fmt.getLong(MediaFormat.KEY_DURATION)
                 this.width = fmt.getInteger(MediaFormat.KEY_WIDTH)
                 this.height = fmt.getInteger(MediaFormat.KEY_HEIGHT)
@@ -72,13 +70,13 @@ class MyVideoPlayer {
             }
         }
 
-        _videoFrameIndexMap = mutableListOf()
+        _ptsGroupByGopList = mutableListOf()
         var videoFrameIndexListGop = mutableListOf<Long>()
 
         while (true) {
             if (_extractor!!.sampleFlags == MediaExtractor.SAMPLE_FLAG_SYNC) {
                 videoFrameIndexListGop = mutableListOf<Long>()
-                _videoFrameIndexMap!!.add(videoFrameIndexListGop)
+                _ptsGroupByGopList!!.add(videoFrameIndexListGop)
             }
 
             videoFrameIndexListGop.add(_extractor!!.sampleTime)
@@ -88,31 +86,31 @@ class MyVideoPlayer {
                 break
         }
 
-        _vCodec!!.start()
+        _decorder!!.start()
 
         repeat(100) {
-            val idx = _vCodec!!.dequeueInputBuffer(0)
+            val idx = _decorder!!.dequeueInputBuffer(0)
 
             if (idx >= 0)
-                _maxVcodecBufSize++
+                _maxCodecBufSize++
         }
 
-        _vCodec!!.flush()
+        _decorder!!.flush()
         _extractor!!.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
     }
 
     fun seekPrevFrame() {
-        val ptsInGopList = _videoFrameIndexMap!!.first { this.curPts <= it.last() }
+        val ptsInGopList = _ptsGroupByGopList!!.first { this.curPts <= it.last() }
         val idxPts = ptsInGopList.indexOf(this.curPts)
         var prevPts = 0L
 
         if (idxPts > 0) {
             prevPts = ptsInGopList[idxPts - 1]
         } else {
-            val idxList = _videoFrameIndexMap!!.indexOf(ptsInGopList)
+            val idxList = _ptsGroupByGopList!!.indexOf(ptsInGopList)
 
             if (idxList > 0) {
-                prevPts = _videoFrameIndexMap!![idxList - 1].last()
+                prevPts = _ptsGroupByGopList!![idxList - 1].last()
             }
         }
 
@@ -120,7 +118,7 @@ class MyVideoPlayer {
     }
 
     fun seek(pts: Long) {
-        val lastPts = _videoFrameIndexMap!!.last().last()
+        val lastPts = _ptsGroupByGopList!!.last().last()
 
         var caliPts = when {
             pts < 0 -> {
@@ -134,7 +132,7 @@ class MyVideoPlayer {
             }
         }
 
-        val ptsInGopList = _videoFrameIndexMap!!.first { caliPts <= it.last() }
+        val ptsInGopList = _ptsGroupByGopList!!.first { caliPts <= it.last() }
         var idxNear = 0
 
         if (caliPts <= ptsInGopList.first()) {
@@ -161,11 +159,11 @@ class MyVideoPlayer {
             }
         }
 
-        decodeRender(true)
+        this.decodeRender(true)
     }
 
     fun decodeRender(render: Boolean): Boolean {
-        if (_vCodec == null)
+        if (_decorder == null)
             return false
 
         if (_extractor == null)
@@ -184,17 +182,17 @@ class MyVideoPlayer {
         var idx = 0
 
         while (true) {
-            idx = _vCodec!!.dequeueInputBuffer(0)
+            idx = _decorder!!.dequeueInputBuffer(0)
 
             if (idx >= 0)
                 break
         }
 
-        val buf = _vCodec!!.getInputBuffer(idx)
+        val buf = _decorder!!.getInputBuffer(idx)
         val readSize = _extractor!!.readSampleData(buf!!, 0)
         val flags = _extractor!!.sampleFlags
         val pts = _extractor!!.sampleTime
-        _vCodec!!.queueInputBuffer(idx, 0, readSize, pts, flags)
+        _decorder!!.queueInputBuffer(idx, 0, readSize, pts, flags)
 
         LogEx.d(
             "INBUF " +
@@ -207,7 +205,7 @@ class MyVideoPlayer {
         val info = MediaCodec.BufferInfo()
 
         while (true) {
-            idx = _vCodec!!.dequeueOutputBuffer(info, 0)
+            idx = _decorder!!.dequeueOutputBuffer(info, 0)
 
             if (idx >= 0)
                 break
@@ -228,7 +226,7 @@ class MyVideoPlayer {
             this.curPts = pts
         }
 
-        _vCodec!!.releaseOutputBuffer(idx, render)
+        _decorder!!.releaseOutputBuffer(idx, render)
         return true
     }
 
@@ -240,7 +238,6 @@ class MyVideoPlayer {
         this.fps = -1
         this.isPlay = false
         this.isReverse = false
-        this.speedRatio = 1.0
 
         if (_extractor != null) {
             _extractor!!.release()
@@ -248,24 +245,15 @@ class MyVideoPlayer {
         }
 
         _lastRenderTimeUs = -1L
-        _maxVcodecBufSize = 0
+        _maxCodecBufSize = 0
 
-        if (_vCodec != null) {
-            _vCodec!!.stop()
-            _vCodec!!.release()
-            _vCodec = null
+        if (_decorder != null) {
+            _decorder!!.stop()
+            _decorder!!.release()
+            _decorder = null
         }
 
-        _videoFrameIndexMap = null
-    }
-
-    fun getWaitTimeMs(): Long {
-        val nowUs = System.nanoTime() / 1_000
-        val waitTimeUs =
-            (1_000_000 / this.fps) * (1 / this.speedRatio) - (nowUs - _lastRenderTimeUs)
-        val waitTimeMs = (waitTimeUs / 1_000).toLong()
-        LogEx.value("waitTimeMs", waitTimeMs)
-        return waitTimeMs
+        _ptsGroupByGopList = null
     }
 
     fun advance() {
@@ -278,14 +266,14 @@ class MyVideoPlayer {
         if (pts >= 0) {
             targetPts = pts
         } else {
-            targetPts = _videoFrameIndexMap!!.last().last()
+            targetPts = _ptsGroupByGopList!!.last().last()
         }
 
         val ptsInGopList =
-            _videoFrameIndexMap!!.first { it.first() <= targetPts && targetPts <= it.last() }
+            _ptsGroupByGopList!!.first { it.first() <= targetPts && targetPts <= it.last() }
         val keyFramePts = ptsInGopList.first()
         val targetIdx = ptsInGopList.indexOf(targetPts)
-        val subGopFirstIdx = max(targetIdx - _maxVcodecBufSize + 1, 0)
+        val subGopFirstIdx = max(targetIdx - _maxCodecBufSize + 1, 0)
         val subGopSize = targetIdx - subGopFirstIdx + 1
 
         _extractor!!.seekTo(keyFramePts, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
@@ -298,7 +286,7 @@ class MyVideoPlayer {
         val inBufIdxList = mutableListOf<Int>()
 
         repeat(subGopSize) {
-            val idx = _vCodec!!.dequeueInputBuffer(0)
+            val idx = _decorder!!.dequeueInputBuffer(0)
 
             if (idx >= 0) {
                 inBufIdxList.add(idx)
@@ -309,7 +297,7 @@ class MyVideoPlayer {
         val inBufIdxPtsList = mutableListOf<Pair<Int, Long>>()
 
         for (idx in inBufIdxList) {
-            val buf = _vCodec!!.getInputBuffer(idx)
+            val buf = _decorder!!.getInputBuffer(idx)
             var readSize = _extractor!!.readSampleData(buf!!, 0)
             var flags = _extractor!!.sampleFlags
             var pts = _extractor!!.sampleTime
@@ -321,7 +309,7 @@ class MyVideoPlayer {
             }
 
             LogEx.d("queueInputBuffer idx[${idx}] pts[${pts}] readSize[${readSize}]")
-            _vCodec!!.queueInputBuffer(idx, 0, readSize, pts, flags)
+            _decorder!!.queueInputBuffer(idx, 0, readSize, pts, flags)
             _extractor!!.advance()
             inBufIdxPtsList.add(Pair(idx, pts))
         }
@@ -331,7 +319,7 @@ class MyVideoPlayer {
         while (true) {
             repeat(subGopSize) {
                 val info = MediaCodec.BufferInfo()
-                val idx = _vCodec!!.dequeueOutputBuffer(info, 0)
+                val idx = _decorder!!.dequeueOutputBuffer(info, 0)
 
                 if (idx >= 0) {
                     LogEx.d("dequeueOutputBuffer idx[$idx] pts[${info.presentationTimeUs}]")
@@ -359,10 +347,10 @@ class MyVideoPlayer {
         if (subGopFirstIdx > 0) {
             prevPts = ptsInGopList[subGopFirstIdx - 1]
         } else {
-            val curPtsGopIdx = _videoFrameIndexMap!!.indexOf(ptsInGopList)
+            val curPtsGopIdx = _ptsGroupByGopList!!.indexOf(ptsInGopList)
 
             if (curPtsGopIdx > 0)
-                prevPts = _videoFrameIndexMap!![curPtsGopIdx - 1].last()
+                prevPts = _ptsGroupByGopList!![curPtsGopIdx - 1].last()
         }
 
         return Pair(outBufIdxPtsList, prevPts)
@@ -372,10 +360,11 @@ class MyVideoPlayer {
         LogEx.d("releaseOutputBuffer idx[$idxOutBuf] pts[${pts}]")
         _lastRenderTimeUs = System.nanoTime() / 1_000
         this.curPts = pts
-        _vCodec!!.releaseOutputBuffer(idxOutBuf, true)
+        _decorder!!.releaseOutputBuffer(idxOutBuf, true)
     }
 
     fun test() {
-        _vCodec!!.flush()
+        _decorder!!.flush()
     }
 }
+

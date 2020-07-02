@@ -4,14 +4,15 @@ import android.view.Surface
 import com.hhd.myandvideotest.util.MyUtil
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.subjects.PublishSubject
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import java.io.File
 
 class MyPvPipeLine {
 
     var isOpen: Boolean = false
         get() {
+            if (_myAudioPlayer == null)
+                return false
+
             if (_myVideoPlayer == null)
                 return false
 
@@ -19,35 +20,37 @@ class MyPvPipeLine {
         }
         private set
 
-    var isPlay: Boolean = false
+    var isPlay: Boolean
         get() {
+            if (_myAudioPlayer == null)
+                return false
+
             if (_myVideoPlayer == null)
                 return false
 
-            return _myVideoPlayer!!.isPlay
+            return _myAudioPlayer!!.isPlay
         }
-        private set
+        set(value) {
+            _myAudioPlayer!!.isPlay = value
+            _myVideoPlayer!!.isPlay = value
+        }
+
 
     var speedRatio: Double
         get() {
-            if (_myVideoPlayer == null)
-                return 1.0
-
-            return _myVideoPlayer!!.speedRatio
+            return _mySpeedControlAudio.speedRatio
         }
         set(value) {
-            if (_myVideoPlayer == null)
-                return
-
-            _myVideoPlayer!!.speedRatio = value
+            _mySpeedControlAudio.speedRatio = value
+            _mySpeedControlVideo.speedRatio = value
         }
 
     var durationUs: Long = -1L
         get() {
-            if (_myVideoPlayer == null)
+            if (_myAudioPlayer == null)
                 return -1L
 
-            return _myVideoPlayer!!.durationUs
+            return _myAudioPlayer!!.durationUs
         }
         private set
 
@@ -103,18 +106,25 @@ class MyPvPipeLine {
 
 
     private var _myVideoPlayer: MyVideoPlayer? = null
+    private var _myAudioPlayer: MyAudioPlayer? = null
     private val _pipeline = PublishSubject.create<Array<Any>>()
+    private val _mySpeedControlAudio = MySpeedControl()
+    private val _mySpeedControlVideo = MySpeedControl()
 
     private enum class _Commands {
         NONE,
-        OPEN,
-        CLOSE,
-        SEEK,
-        DECODE_RENDER,
-        DECODE_RENDER_1FRAME,
-        DECODE_RENDER_REVERSE,
-        DECODE_RENDER_1FRAME_REVERSE,
-        RENDER_IDX_OUT_BUF,
+        OPEN_VIDEO,
+        OPEN_AUDIO,
+        CLOSE_VIDEO,
+        CLOSE_AUDIO,
+        SEEK_VIDEO,
+        SEEK_AUDIO,
+        DECODE_RENDER_VIDEO,
+        DECODE_RENDER_AUDIO,
+        DECODE_RENDER_1FRAME_VIDEO,
+        DECODE_RENDER_REVERSE_VIDEO,
+        DECODE_RENDER_1FRAME_REVERSE_VIDEO,
+        RENDER_IDX_OUT_BUF_VIDEO,
         UPDATE_UI,
         TEST,
     }
@@ -134,22 +144,69 @@ class MyPvPipeLine {
                 }
                 return@map paramArray
             }
-            .observeOn(MyUtil.newNamedScheduler("T_PLAYER"))
+            .observeOn(MyUtil.newNamedScheduler("T_AUDIO"))
             .map {
                 val paramArray = it as Array<*>
                 val cmd = paramArray[0] as _Commands
 
                 when (cmd) {
-                    _Commands.OPEN -> {
+                    _Commands.OPEN_AUDIO -> {
+                        val srcFile = paramArray[1] as File
+                        _myAudioPlayer = MyAudioPlayer()
+                        _myAudioPlayer!!.prepare(srcFile)
+                        _mySpeedControlAudio.init()
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                    }
+                    _Commands.CLOSE_AUDIO -> {
+                        if (_myAudioPlayer == null)
+                            return@map null
+
+                        _myAudioPlayer!!.stop()
+                        _myAudioPlayer = null
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                    }
+                    _Commands.SEEK_AUDIO -> {
+                        if (_myAudioPlayer == null)
+                            return@map paramArray
+
+                        val pts = paramArray[1] as Long
+                        _myAudioPlayer!!.seek(pts)
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                    }
+                    _Commands.DECODE_RENDER_AUDIO -> {
+                        if (_myAudioPlayer == null)
+                            return@map paramArray
+
+                        _mySpeedControlAudio.waitBeforeRenderFrame(_myAudioPlayer!!.curPts)
+                        val res = _myAudioPlayer!!.decodeRender(true)
+
+                        if (!res)
+                            return@map paramArray
+
+                        _myAudioPlayer!!.advance()
+                        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_AUDIO))
+                        _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
+                    }
+                }
+
+                return@map paramArray
+            }
+            .observeOn(MyUtil.newNamedScheduler("T_VIDEO"))
+            .map {
+                val paramArray = it as Array<*>
+                val cmd = paramArray[0] as _Commands
+
+                when (cmd) {
+                    _Commands.OPEN_VIDEO -> {
                         val srcFile = paramArray[1] as File
                         val renderSurface = paramArray[2] as Surface
                         _myVideoPlayer = MyVideoPlayer()
                         _myVideoPlayer!!.prepare(srcFile, renderSurface)
+                        _mySpeedControlVideo.init()
                         _myVideoPlayer!!.seek(0)
-                        _myVideoPlayer!!.decodeRender(true)
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                    _Commands.CLOSE -> {
+                    _Commands.CLOSE_VIDEO -> {
                         if (_myVideoPlayer == null)
                             return@map null
 
@@ -157,37 +214,32 @@ class MyPvPipeLine {
                         _myVideoPlayer = null
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                    _Commands.SEEK -> {
+                    _Commands.SEEK_VIDEO -> {
                         if (_myVideoPlayer == null)
                             return@map paramArray
 
                         val pts = paramArray[1] as Long
                         _myVideoPlayer!!.seek(pts)
-                        _myVideoPlayer!!.decodeRender(true)
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                    _Commands.DECODE_RENDER -> {
+                    _Commands.DECODE_RENDER_VIDEO -> {
                         if (_myVideoPlayer == null)
                             return@map paramArray
 
                         if (!_myVideoPlayer!!.isPlay)
                             return@map paramArray
 
+                        _mySpeedControlVideo.waitBeforeRenderFrame(_myVideoPlayer!!.curPts)
                         val res = _myVideoPlayer!!.decodeRender(true)
 
                         if (!res)
                             return@map paramArray
 
-                        val waitTimeMs = _myVideoPlayer!!.getWaitTimeMs()
-
-                        if (waitTimeMs > 0)
-                            runBlocking { delay(waitTimeMs) }
-
                         _myVideoPlayer!!.advance()
-                        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER))
+                        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_VIDEO))
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                    _Commands.DECODE_RENDER_1FRAME -> {
+                    _Commands.DECODE_RENDER_1FRAME_VIDEO -> {
                         if (_myVideoPlayer == null)
                             return@map paramArray
 
@@ -195,14 +247,14 @@ class MyPvPipeLine {
                         _myVideoPlayer!!.advance()
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                    _Commands.DECODE_RENDER_1FRAME_REVERSE -> {
+                    _Commands.DECODE_RENDER_1FRAME_REVERSE_VIDEO -> {
                         if (_myVideoPlayer == null)
                             return@map paramArray
 
                         _myVideoPlayer!!.seekPrevFrame()
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                    _Commands.DECODE_RENDER_REVERSE -> {
+                    _Commands.DECODE_RENDER_REVERSE_VIDEO -> {
                         if (_myVideoPlayer == null)
                             return@map paramArray
 
@@ -217,15 +269,15 @@ class MyPvPipeLine {
                         for (pair in outBufIdxPtsList) {
                             val idx = pair.first
                             val pts = pair.second
-                            _pipeline.onNext(arrayOf(_Commands.RENDER_IDX_OUT_BUF, idx, pts))
+                            _pipeline.onNext(arrayOf(_Commands.RENDER_IDX_OUT_BUF_VIDEO, idx, pts))
                         }
 
                         if (prevPts >= 0)
-                            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE, prevPts))
+                            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE_VIDEO, prevPts))
 
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
-                    _Commands.RENDER_IDX_OUT_BUF -> {
+                    _Commands.RENDER_IDX_OUT_BUF_VIDEO -> {
                         if (_myVideoPlayer == null)
                             return@map paramArray
 
@@ -234,11 +286,8 @@ class MyPvPipeLine {
 
                         val idx = paramArray[1] as Int
                         val pts = paramArray[2] as Long
-                        val waitTimeMs = _myVideoPlayer!!.getWaitTimeMs()
 
-                        if (waitTimeMs > 0)
-                            runBlocking { delay(waitTimeMs) }
-
+                        _mySpeedControlVideo.waitBeforeRenderFrame(_myVideoPlayer!!.curPts)
                         _myVideoPlayer!!.renderIdxOutBuf(idx, pts)
                         _pipeline.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
@@ -259,7 +308,14 @@ class MyPvPipeLine {
     fun open(srcFile: File, renderSurface: Surface) {
         _pipeline.onNext(
             arrayOf(
-                _Commands.OPEN,
+                _Commands.OPEN_AUDIO,
+                srcFile
+            )
+        )
+
+        _pipeline.onNext(
+            arrayOf(
+                _Commands.OPEN_VIDEO,
                 srcFile,
                 renderSurface
             )
@@ -267,27 +323,34 @@ class MyPvPipeLine {
     }
 
     fun close() {
-        _pipeline.onNext(arrayOf(_Commands.CLOSE))
+        _pipeline.onNext(arrayOf(_Commands.CLOSE_AUDIO))
+        _pipeline.onNext(arrayOf(_Commands.CLOSE_VIDEO))
     }
 
     fun seek(pts: Long) {
-        _pipeline.onNext(arrayOf(_Commands.SEEK, pts))
+        _pipeline.onNext(arrayOf(_Commands.SEEK_AUDIO, pts))
+        _pipeline.onNext(arrayOf(_Commands.SEEK_VIDEO, pts))
     }
 
     fun play() {
+        if (_myAudioPlayer == null)
+            return
+
         if (_myVideoPlayer == null)
             return
 
+        _myAudioPlayer!!.isPlay = true
         _myVideoPlayer!!.isPlay = true
 
         if (_myVideoPlayer!!.isReverse) {
             if (this.curPts == 0L) {
-                _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE, -1L))
+                _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE_VIDEO, -1L))
             } else {
-                _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE, this.curPts))
+                _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE_VIDEO, this.curPts))
             }
         } else {
-            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER))
+            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_AUDIO))
+            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_VIDEO))
         }
     }
 
@@ -304,12 +367,12 @@ class MyPvPipeLine {
 
     fun decodeRenderNextFrame() {
         this.pause()
-        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME))
+        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME_VIDEO))
     }
 
     fun decodeRenderPrevFrame() {
         this.pause()
-        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME_REVERSE))
+        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME_REVERSE_VIDEO))
     }
 }
 
