@@ -29,6 +29,7 @@ class MyAudioPlayer {
     var lastRenderTimeUs: Long = -1L
         private set
 
+    var isOpen = false
     var isPlay = false
     var speedRatio = 1.0
 
@@ -61,18 +62,16 @@ class MyAudioPlayer {
             }
         }
 
-        if (idxAudioTrack < 0)
-            throw Exception("idxAudioTrack < 0")
-
-        if (fmt == null)
-            throw Exception("fmt == null")
-
-        if (mime == null)
-            throw Exception("mime == null")
+        if (idxAudioTrack >= 0) {
+            this.isOpen = true
+        } else {
+            this.stop()
+            return
+        }
 
         LogEx.value("fmt", fmt)
         _extractor!!.selectTrack(idxAudioTrack)
-        this.sampleRate = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        this.sampleRate = fmt!!.getInteger(MediaFormat.KEY_SAMPLE_RATE)
         this.channelCount = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
         this.durationUs = fmt.getLong(MediaFormat.KEY_DURATION)
 
@@ -102,7 +101,7 @@ class MyAudioPlayer {
         if (this.pcmEncoding < 0)
             this.pcmEncoding = AudioFormat.ENCODING_PCM_16BIT
 
-        _decorder = MediaCodec.createDecoderByType(mime)
+        _decorder = MediaCodec.createDecoderByType(mime!!)
         _decorder!!.configure(fmt, null, null, 0)
         _decorder!!.start()
 
@@ -241,6 +240,7 @@ class MyAudioPlayer {
     }
 
     fun stop() {
+        this.isOpen = false
         this.curPts = -1L
         this.durationUs = -1L
         this.isPlay = false

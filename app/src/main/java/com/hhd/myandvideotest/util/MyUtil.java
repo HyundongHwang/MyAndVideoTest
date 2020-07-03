@@ -18,6 +18,8 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 
+import com.google.android.flexbox.FlexWrap;
+import com.google.android.flexbox.FlexboxLayout;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -48,6 +50,15 @@ public class MyUtil {
         ll.setOrientation(LinearLayout.VERTICAL);
         ll.setHorizontalScrollBarEnabled(false);
         return ll;
+    }
+
+    public static FlexboxLayout createFlexboxLayoutMpWc(Context context) {
+        FlexboxLayout fl = new FlexboxLayout(context);
+        ViewGroup.LayoutParams mpwc = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        fl.setLayoutParams(mpwc);
+        fl.setFlexWrap(FlexWrap.WRAP);
+        fl.setHorizontalScrollBarEnabled(false);
+        return fl;
     }
 
     public static LinearLayout createActivityGatewayLinearLayout(final Activity activity) {
@@ -119,5 +130,17 @@ public class MyUtil {
     public static String toJsonStr(Object obj) {
         String res = _gson.toJson(obj);
         return res;
+    }
+
+    public static float dp2Px(Context context, float dp) {
+        DisplayMetrics dm = context.getResources().getDisplayMetrics();
+        float px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, dm);
+        return px;
+    }
+
+    public static float sp2Px(Context context, float sp) {
+        DisplayMetrics dm = context.getResources().getDisplayMetrics();
+        float px = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, dm);
+        return px;
     }
 }

@@ -77,7 +77,6 @@ class MyPlayVideoActivity : AppCompatActivity() {
 
         this.btn_open_close.setOnClickListener { _btn_open_close_click() }
         this.btn_play_pause.setOnClickListener { _btn_play_pause_click() }
-        this.btn_test.setOnClickListener { _btn_test_click() }
 
         this.sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -119,10 +118,6 @@ class MyPlayVideoActivity : AppCompatActivity() {
 
     private fun _btn_frame_next_click() {
         _pipeline.decodeRenderNextFrame()
-    }
-
-    private fun _btn_test_click() {
-        _pipeline.test()
     }
 
     private fun _sb_progress_change_fromUser(progress: Int, max: Int) {

@@ -28,6 +28,7 @@ class MyVideoPlayer {
 
     var durationUs: Long = -1L
     var fps: Int = -1
+    var isOpen = false
     var isPlay = false
     var isReverse = false
 
@@ -46,29 +47,42 @@ class MyVideoPlayer {
             _extractor!!.unselectTrack(i)
         }
 
+        var fmt: MediaFormat? = null
+        var mime: String? = null
+        var idxVideoTrack: Int = -1
+
         for (i in 0 until _extractor!!.trackCount) {
-            val fmt = _extractor!!.getTrackFormat(i)
-            val mime = fmt.getString(MediaFormat.KEY_MIME)
+            fmt = _extractor!!.getTrackFormat(i)
+            mime = fmt.getString(MediaFormat.KEY_MIME)
 
             if (mime.contains("video/")) {
-                LogEx.value("fmt", fmt)
-                _extractor!!.selectTrack(i)
-                _decorder = MediaCodec.createDecoderByType(mime)
-                _decorder!!.configure(fmt, renderSurface, null, 0)
-                this.durationUs = fmt.getLong(MediaFormat.KEY_DURATION)
-                this.width = fmt.getInteger(MediaFormat.KEY_WIDTH)
-                this.height = fmt.getInteger(MediaFormat.KEY_HEIGHT)
-
-                try {
-                    this.rotation = fmt.getInteger(MediaFormat.KEY_ROTATION)
-                } catch (ex: Exception) {
-                    this.rotation = 0
-                }
-
-                this.fps = fmt.getInteger(MediaFormat.KEY_FRAME_RATE)
+                idxVideoTrack = i
                 break
             }
         }
+
+        if (idxVideoTrack >= 0) {
+            this.isOpen = true
+        } else {
+            this.stop()
+            return
+        }
+
+        LogEx.value("fmt", fmt)
+        _extractor!!.selectTrack(idxVideoTrack)
+        _decorder = MediaCodec.createDecoderByType(mime!!)
+        _decorder!!.configure(fmt, renderSurface, null, 0)
+        this.durationUs = fmt!!.getLong(MediaFormat.KEY_DURATION)
+        this.width = fmt.getInteger(MediaFormat.KEY_WIDTH)
+        this.height = fmt.getInteger(MediaFormat.KEY_HEIGHT)
+
+        try {
+            this.rotation = fmt.getInteger(MediaFormat.KEY_ROTATION)
+        } catch (ex: Exception) {
+            this.rotation = 0
+        }
+
+        this.fps = fmt.getInteger(MediaFormat.KEY_FRAME_RATE)
 
         _ptsGroupByGopList = mutableListOf()
         var videoFrameIndexListGop = mutableListOf<Long>()
@@ -121,19 +135,12 @@ class MyVideoPlayer {
         val lastPts = _ptsGroupByGopList!!.last().last()
 
         var caliPts = when {
-            pts < 0 -> {
-                0L
-            }
-            pts > lastPts -> {
-                lastPts
-            }
-            else -> {
-                pts
-            }
+            pts < 0 -> 0L
+            pts > lastPts -> lastPts
+            else -> pts
         }
 
         val ptsInGopList = _ptsGroupByGopList!!.first { caliPts <= it.last() }
-        var idxNear = 0
 
         if (caliPts <= ptsInGopList.first()) {
             caliPts = ptsInGopList.first()
@@ -231,6 +238,7 @@ class MyVideoPlayer {
     }
 
     fun stop() {
+        this.isOpen = false
         this.curPts = -1L
         this.width = -1
         this.height = -1
@@ -363,8 +371,30 @@ class MyVideoPlayer {
         _decorder!!.releaseOutputBuffer(idxOutBuf, true)
     }
 
-    fun test() {
-        _decorder!!.flush()
+    fun syncToAudioPts(audioPts: Long) {
+        val ptsDiff = _extractor!!.sampleTime - audioPts
+        LogEx.value("ptsDiff", ptsDiff)
+
+        if (ptsDiff > 1_000_000) {
+            LogEx.d("delay")
+//            runBlocking { delay(ptsDiff / 1_000) }
+        } else if (ptsDiff < -1_000_000) {
+            while (true) {
+                if (_extractor!!.sampleTime >= audioPts)
+                    break
+
+                val isEos =
+                    _extractor!!.sampleFlags and MediaCodec.BUFFER_FLAG_END_OF_STREAM ==
+                            MediaCodec.BUFFER_FLAG_END_OF_STREAM
+
+                if (isEos)
+                    break
+
+                LogEx.d("decodeRender advance")
+                this.decodeRender(false)
+                this.advance()
+            }
+        }
     }
 }
 
