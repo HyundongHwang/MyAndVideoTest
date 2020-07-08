@@ -1,5 +1,6 @@
 package com.hhd.myandvideotest.myplayvideo
 
+import android.annotation.SuppressLint
 import android.view.Surface
 import com.hhd.myandvideotest.util.LogEx
 import com.hhd.myandvideotest.util.MyUtil
@@ -121,9 +122,12 @@ class MyPvPipeLine {
 
     private val _myVideoPlayer = MyVideoPlayer()
     private val _myAudioPlayer = MyAudioPlayer()
-    private val _pipeline = PublishSubject.create<Array<Any>>()
     private val _mySpeedControlAudio = MySpeedControl()
     private val _mySpeedControlVideo = MySpeedControl()
+
+    private val _ps_audio = PublishSubject.create<Array<Any>>()
+    private val _ps_video = PublishSubject.create<Array<Any>>()
+    private val _ps_ui = PublishSubject.create<Array<Any>>()
 
     private enum class _Commands {
         NONE,
@@ -140,28 +144,15 @@ class MyPvPipeLine {
         DECODE_RENDER_1FRAME_REVERSE_VIDEO,
         RENDER_IDX_OUT_BUF_VIDEO,
         UPDATE_UI,
-        ON_NEXT,
     }
 
 
+    @SuppressLint("CheckResult")
     constructor(updateUiCb: (MyPvPipeLine) -> Unit) {
-        _pipeline
-            .observeOn(AndroidSchedulers.mainThread())
-            .flatMap {
-                val paramArray = it as Array<Any>
-                val cmd = paramArray[0] as _Commands
 
-                when (cmd) {
-                    _Commands.UPDATE_UI -> {
-                        updateUiCb(this)
-                        return@flatMap Observable.just(arrayOf(_Commands.NONE))
-                    }
-                }
-
-                return@flatMap Observable.just(paramArray)
-            }
+        _ps_audio
             .observeOn(MyUtil.newNamedScheduler("T_AUDIO"))
-            .flatMap {
+            .map {
                 val paramArray = it as Array<Any>
                 val cmd = paramArray[0] as _Commands
 
@@ -170,58 +161,47 @@ class MyPvPipeLine {
                         val srcFile = paramArray[1] as File
                         _myAudioPlayer.prepare(srcFile)
                         _mySpeedControlAudio.init()
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.CLOSE_AUDIO -> {
                         _myAudioPlayer.stop()
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.SEEK_AUDIO -> {
                         if (!_myAudioPlayer.isOpen)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         val pts = paramArray[1] as Long
                         _myAudioPlayer.seek(pts)
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.DECODE_RENDER_AUDIO -> {
-                        LogEx.d("DECODE_RENDER_AUDIO start")
                         if (!_myAudioPlayer.isOpen)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         if (!_myAudioPlayer.isPlay)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         _mySpeedControlAudio.waitBeforeRenderFrame(_myAudioPlayer.curPts)
                         val res = _myAudioPlayer.decodeRender(true)
-                        LogEx.value("res", res)
+
 
                         if (!res)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         _myAudioPlayer.advance()
-                        LogEx.d("fire DECODE_RENDER_AUDIO")
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.DECODE_RENDER_AUDIO),
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_audio.onNext(arrayOf(_Commands.DECODE_RENDER_AUDIO))
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                 }
 
-                return@flatMap Observable.just(paramArray)
+                return@map it
             }
+            .subscribe()
+
+        _ps_video
             .observeOn(MyUtil.newNamedScheduler("T_VIDEO"))
-            .flatMap {
+            .map {
                 val paramArray = it as Array<Any>
                 val cmd = paramArray[0] as _Commands
 
@@ -232,154 +212,138 @@ class MyPvPipeLine {
                         _myVideoPlayer.prepare(srcFile, renderSurface)
                         _mySpeedControlVideo.init()
                         _myVideoPlayer.seek(0)
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.CLOSE_VIDEO -> {
                         _myVideoPlayer.stop()
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.SEEK_VIDEO -> {
                         if (!_myVideoPlayer.isOpen)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         val pts = paramArray[1] as Long
                         _myVideoPlayer.seek(pts)
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.DECODE_RENDER_VIDEO -> {
-                        LogEx.d("DECODE_RENDER_VIDEO start")
                         if (!_myVideoPlayer.isOpen)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         if (!_myVideoPlayer.isPlay)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         _myVideoPlayer.syncToAudioPts(_myAudioPlayer.curPts)
                         _mySpeedControlVideo.waitBeforeRenderFrame(_myVideoPlayer.curPts)
                         val res = _myVideoPlayer.decodeRender(true)
-                        LogEx.value("res", res)
 
                         if (!res)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         _myVideoPlayer.advance()
-                        LogEx.d("fire DECODE_RENDER_VIDEO")
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.DECODE_RENDER_VIDEO),
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_video.onNext(arrayOf(_Commands.DECODE_RENDER_VIDEO))
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.DECODE_RENDER_1FRAME_VIDEO -> {
                         if (!_myVideoPlayer.isOpen)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         _myVideoPlayer.decodeRender(true)
                         _myVideoPlayer.advance()
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.DECODE_RENDER_1FRAME_REVERSE_VIDEO -> {
                         if (!_myVideoPlayer.isOpen)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         _myVideoPlayer.seekPrevFrame()
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.DECODE_RENDER_REVERSE_VIDEO -> {
                         if (!_myVideoPlayer.isOpen)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         if (!_myVideoPlayer.isPlay)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         val curPts = paramArray[1] as Long
                         val pair = _myVideoPlayer.decodeReverse(curPts)
                         val outBufIdxPtsList = pair.first
                         val prevPts = pair.second
-                        val resList = mutableListOf<Array<Any>>()
 
                         for (pair in outBufIdxPtsList) {
                             val idx = pair.first
                             val pts = pair.second
-//                            _pipeline.onNext(arrayOf(_Commands.RENDER_IDX_OUT_BUF_VIDEO, idx, pts))
-                            resList.add(arrayOf(_Commands.ON_NEXT, _Commands.RENDER_IDX_OUT_BUF_VIDEO, idx, pts))
+                            _ps_video.onNext(
+                                arrayOf(
+                                    _Commands.RENDER_IDX_OUT_BUF_VIDEO,
+                                    idx,
+                                    pts
+                                )
+                            )
                         }
 
                         if (prevPts >= 0)
-                            resList.add(arrayOf(_Commands.ON_NEXT, _Commands.DECODE_RENDER_REVERSE_VIDEO, prevPts))
+                            _ps_video.onNext(
+                                arrayOf(
+                                    _Commands.DECODE_RENDER_REVERSE_VIDEO,
+                                    prevPts
+                                )
+                            )
 
-                        resList.add(arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI))
-                        return@flatMap resList.toObservable()
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                     _Commands.RENDER_IDX_OUT_BUF_VIDEO -> {
                         if (!_myVideoPlayer.isOpen)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         if (!_myVideoPlayer.isPlay)
-                            return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                            return@map it
 
                         val idx = paramArray[1] as Int
                         val pts = paramArray[2] as Long
 
                         _mySpeedControlVideo.waitBeforeRenderFrame(_myVideoPlayer.curPts)
                         _myVideoPlayer.renderIdxOutBuf(idx, pts)
-
-                        return@flatMap Observable.just(
-                            arrayOf(_Commands.ON_NEXT, _Commands.UPDATE_UI)
-                        )
+                        _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
                 }
-                return@flatMap Observable.just(paramArray)
+
+                return@map it
             }
-            .observeOn(MyUtil.newNamedScheduler("T_ON_NEXT"))
-            .flatMap {
+            .subscribe()
+
+        _ps_ui
+            .observeOn(AndroidSchedulers.mainThread())
+            .map {
                 val paramArray = it as Array<Any>
                 val cmd = paramArray[0] as _Commands
 
                 when (cmd) {
-                    _Commands.ON_NEXT -> {
-//                        val subParamArray = paramArray[1] as Array<Any>
-                        val subParamArray = paramArray.copyOfRange(1, paramArray.size)
-                        _pipeline.onNext(subParamArray)
-                        return@flatMap Observable.just(arrayOf(_Commands.NONE))
+                    _Commands.UPDATE_UI -> {
+                        updateUiCb(this)
                     }
                 }
 
-                return@flatMap Observable.just(paramArray)
+                return@map it
             }
             .subscribe()
-
     }
 
 
     fun open(srcFile: File, renderSurface: Surface) {
-        _pipeline.onNext(arrayOf(_Commands.OPEN_AUDIO, srcFile))
-        _pipeline.onNext(arrayOf(_Commands.OPEN_VIDEO, srcFile, renderSurface))
+        _ps_audio.onNext(arrayOf(_Commands.OPEN_AUDIO, srcFile))
+        _ps_video.onNext(arrayOf(_Commands.OPEN_VIDEO, srcFile, renderSurface))
     }
 
     fun close() {
-        _pipeline.onNext(arrayOf(_Commands.CLOSE_AUDIO))
-        _pipeline.onNext(arrayOf(_Commands.CLOSE_VIDEO))
+        _ps_audio.onNext(arrayOf(_Commands.CLOSE_AUDIO))
+        _ps_video.onNext(arrayOf(_Commands.CLOSE_VIDEO))
     }
 
     fun seek(pts: Long) {
-        _pipeline.onNext(arrayOf(_Commands.SEEK_AUDIO, pts))
-        _pipeline.onNext(arrayOf(_Commands.SEEK_VIDEO, pts))
+        _ps_audio.onNext(arrayOf(_Commands.SEEK_AUDIO, pts))
+        _ps_video.onNext(arrayOf(_Commands.SEEK_VIDEO, pts))
     }
 
     fun play() {
@@ -388,13 +352,13 @@ class MyPvPipeLine {
 
         if (_myVideoPlayer.isReverse) {
             if (this.curPts == 0L) {
-                _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE_VIDEO, -1L))
+                _ps_video.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE_VIDEO, -1L))
             } else {
-                _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE_VIDEO, this.curPts))
+                _ps_video.onNext(arrayOf(_Commands.DECODE_RENDER_REVERSE_VIDEO, this.curPts))
             }
         } else {
-            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_AUDIO))
-            _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_VIDEO))
+            _ps_audio.onNext(arrayOf(_Commands.DECODE_RENDER_AUDIO))
+            _ps_video.onNext(arrayOf(_Commands.DECODE_RENDER_VIDEO))
         }
     }
 
@@ -405,12 +369,11 @@ class MyPvPipeLine {
 
     fun decodeRenderNextFrame() {
         this.pause()
-        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME_VIDEO))
+        _ps_video.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME_VIDEO))
     }
 
     fun decodeRenderPrevFrame() {
         this.pause()
-        _pipeline.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME_REVERSE_VIDEO))
+        _ps_video.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME_REVERSE_VIDEO))
     }
 }
-

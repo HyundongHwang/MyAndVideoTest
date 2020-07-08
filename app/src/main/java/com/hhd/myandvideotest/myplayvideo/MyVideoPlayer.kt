@@ -373,11 +373,9 @@ class MyVideoPlayer {
 
     fun syncToAudioPts(audioPts: Long) {
         val ptsDiff = _extractor!!.sampleTime - audioPts
-        LogEx.value("ptsDiff", ptsDiff)
 
         if (ptsDiff > 1_000_000) {
-            LogEx.d("delay")
-//            runBlocking { delay(ptsDiff / 1_000) }
+            runBlocking { delay(ptsDiff / 1_000) }
         } else if (ptsDiff < -1_000_000) {
             while (true) {
                 if (_extractor!!.sampleTime >= audioPts)
@@ -390,7 +388,6 @@ class MyVideoPlayer {
                 if (isEos)
                     break
 
-                LogEx.d("decodeRender advance")
                 this.decodeRender(false)
                 this.advance()
             }
