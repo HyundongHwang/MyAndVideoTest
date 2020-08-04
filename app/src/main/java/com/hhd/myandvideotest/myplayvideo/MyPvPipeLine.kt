@@ -1,7 +1,12 @@
 package com.hhd.myandvideotest.myplayvideo
 
 import android.annotation.SuppressLint
+import android.graphics.SurfaceTexture
 import android.view.Surface
+import com.hhd.myandvideotest.mycamerarecord.EglCoreUtil
+import com.hhd.myandvideotest.mycamerarecord.EglSurfaceEx
+import com.hhd.myandvideotest.mycamerarecord.MyExtraRenderer
+import com.hhd.myandvideotest.mycamerarecord.MyRenderer
 import com.hhd.myandvideotest.util.LogEx
 import com.hhd.myandvideotest.util.MyUtil
 import io.reactivex.Observable
@@ -128,6 +133,9 @@ class MyPvPipeLine {
     private val _ps_audio = PublishSubject.create<Array<Any>>()
     private val _ps_video = PublishSubject.create<Array<Any>>()
     private val _ps_ui = PublishSubject.create<Array<Any>>()
+    private var _renderer: MyRenderer? = null
+    private var _dispEglSurface: EglSurfaceEx? = null
+
 
     private enum class _Commands {
         NONE,
@@ -144,6 +152,9 @@ class MyPvPipeLine {
         DECODE_RENDER_1FRAME_REVERSE_VIDEO,
         RENDER_IDX_OUT_BUF_VIDEO,
         UPDATE_UI,
+        FRAME_AVAILABLE,
+        SURFACE_TEXTURE_INIT,
+        SURFACE_TEXTURE_CLOSE,
     }
 
 
@@ -307,6 +318,13 @@ class MyPvPipeLine {
                         _myVideoPlayer.renderIdxOutBuf(idx, pts)
                         _ps_ui.onNext(arrayOf(_Commands.UPDATE_UI))
                     }
+                    _Commands.FRAME_AVAILABLE -> {
+                        if (_renderer == null)
+                            return@map paramArray
+
+                        val st = paramArray[1] as SurfaceTexture
+                        _renderer!!.render(st)
+                    }
                 }
 
                 return@map it
@@ -323,6 +341,32 @@ class MyPvPipeLine {
                     _Commands.UPDATE_UI -> {
                         updateUiCb(this)
                     }
+                    _Commands.SURFACE_TEXTURE_INIT -> {
+                        val renderSurface = paramArray[1] as Surface
+                        EglCoreUtil.init(null, EglCoreUtil.FLAG_RECORDABLE)
+                        _dispEglSurface = EglSurfaceEx(renderSurface, false)
+                        _dispEglSurface!!.makeCurrent()
+                        _renderer = MyRenderer()
+                        _renderer!!.extraRendererList.add(MyExtraRenderer())
+                        _renderer!!.start()
+                        val surfaceTexture = SurfaceTexture(_renderer!!.textureId)
+                        _renderer!!.eglSurfaceList.add(_dispEglSurface!!)
+
+                        surfaceTexture.setOnFrameAvailableListener { st ->
+                            _ps_video.onNext(arrayOf(arrayOf(_Commands.FRAME_AVAILABLE)))
+                        }
+                    }
+                    _Commands.SURFACE_TEXTURE_CLOSE -> {
+                        if (_dispEglSurface != null) {
+                            _dispEglSurface!!.release()
+                            _dispEglSurface = null
+                        }
+
+                        if (_renderer != null) {
+                            _renderer!!.stop()
+                            _renderer = null
+                        }
+                    }
                 }
 
                 return@map it
@@ -334,11 +378,13 @@ class MyPvPipeLine {
     fun open(srcFile: File, renderSurface: Surface) {
         _ps_audio.onNext(arrayOf(_Commands.OPEN_AUDIO, srcFile))
         _ps_video.onNext(arrayOf(_Commands.OPEN_VIDEO, srcFile, renderSurface))
+        _ps_ui.onNext(arrayOf(_Commands.OPEN_VIDEO, renderSurface))
     }
 
     fun close() {
         _ps_audio.onNext(arrayOf(_Commands.CLOSE_AUDIO))
         _ps_video.onNext(arrayOf(_Commands.CLOSE_VIDEO))
+        _ps_ui.onNext(arrayOf(_Commands.CLOSE_VIDEO))
     }
 
     fun seek(pts: Long) {
@@ -375,5 +421,13 @@ class MyPvPipeLine {
     fun decodeRenderPrevFrame() {
         this.pause()
         _ps_video.onNext(arrayOf(_Commands.DECODE_RENDER_1FRAME_REVERSE_VIDEO))
+    }
+
+    fun surface_texture_init(renderSurface : Surface) {
+        _ps_ui.onNext(arrayOf(_Commands.SURFACE_TEXTURE_INIT, renderSurface))
+    }
+
+    fun surface_texture_close() {
+        _ps_ui.onNext(arrayOf(_Commands.SURFACE_TEXTURE_CLOSE))
     }
 }

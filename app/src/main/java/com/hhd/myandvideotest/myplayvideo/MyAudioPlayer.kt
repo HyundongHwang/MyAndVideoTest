@@ -26,13 +26,8 @@ class MyAudioPlayer {
     var sampleRate: Int = -1
         private set
 
-    var lastRenderTimeUs: Long = -1L
-        private set
-
     var isOpen = false
     var isPlay = false
-    var speedRatio = 1.0
-
 
     private var _extractor: MediaExtractor? = null
     private var _decorder: MediaCodec? = null
@@ -222,7 +217,6 @@ class MyAudioPlayer {
         )
 
         if (render) {
-            this.lastRenderTimeUs = System.nanoTime() / 1_000
             this.curPts = pts
 
             if (idx >= 0) {
@@ -249,8 +243,6 @@ class MyAudioPlayer {
             _extractor!!.release()
             _extractor = null
         }
-
-        this.lastRenderTimeUs = -1L
 
         if (_decorder != null) {
             _decorder!!.stop()

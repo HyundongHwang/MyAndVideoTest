@@ -3,10 +3,8 @@ package com.hhd.myandvideotest.mytest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.flexbox.FlexboxLayout
 import com.hhd.myandvideotest.util.LogEx
 import com.hhd.myandvideotest.util.MyActivityUtil
 import com.hhd.myandvideotest.util.MyUtil
@@ -749,29 +747,26 @@ class MyTestActivity : AppCompatActivity() {
         LogEx.d("${buf.position()}:${buf.limit()}:${buf.capacity()} $name[${String(buf.array())}]")
     }
 
-    private val _ps_2_thread_loop = PublishSubject.create<Array<Any>>()
 
-    fun _48_2_thread_loop() {
-        _ps_2_thread_loop
-            .observeOn(Schedulers.newThread())
+    fun _48_pipeline_single_line() {
+        val ps = PublishSubject.create<Array<Any>>()
+
+        ps
+            .observeOn(Schedulers.io())
             .map {
                 val cmd = it[0] as String
 
                 when (cmd) {
                     "cmd0" -> {
                         LogEx.d("cmd0 start")
-                        runBlocking { delay(30) }
+                        runBlocking { delay(1_00) }
                         LogEx.d("cmd0 fin")
                         return@map arrayOf("onnext", arrayOf("cmd0"))
-                    }
-                    "interrupt0" -> {
-                        LogEx.d("interrupt0")
-                        runBlocking { delay(30) }
                     }
                 }
                 return@map it
             }
-            .observeOn(Schedulers.newThread())
+            .observeOn(Schedulers.io())
             .map {
                 val cmd = it[0] as String
 
@@ -782,109 +777,72 @@ class MyTestActivity : AppCompatActivity() {
                         LogEx.d("cmd1 fin")
                         return@map arrayOf("onnext", arrayOf("cmd1"))
                     }
-                    "interrupt1" -> {
-                        LogEx.d("interrupt1")
-                        runBlocking { delay(10_000) }
-                    }
                 }
                 return@map it
             }
-            .observeOn(Schedulers.newThread())
+            .observeOn(Schedulers.io())
             .map {
                 val cmd = it[0] as String
-                LogEx.d("onnext start cmd[${cmd}]")
 
                 when (cmd) {
                     "onnext" -> {
                         val onnextArray = it[1] as Array<Any>
                         val incmd = onnextArray[0] as String
                         LogEx.d("onnext incmd[${incmd}]")
-                        _ps_2_thread_loop.onNext(onnextArray)
+                        ps.onNext(onnextArray)
                     }
                 }
 
-                LogEx.d("onnext fin cmd[${cmd}]")
                 return@map it
             }
             .subscribe()
 
 
-        repeat(100) {
-            _ps_2_thread_loop.onNext(arrayOf("cmd0"))
-            _ps_2_thread_loop.onNext(arrayOf("cmd1"))
-        }
+        ps.onNext(arrayOf("cmd0"))
+        ps.onNext(arrayOf("cmd1"))
     }
 
-    fun _49_2_thread_loop_make_interrupt0() {
-        _ps_2_thread_loop.onNext(arrayOf("interrupt0"))
-    }
+    fun _49_pipeline_double_line() {
+        val ps0 = PublishSubject.create<String>()
+        val ps1 = PublishSubject.create<String>()
 
-    fun _50_2_thread_loop_make_interrupt1() {
-        _ps_2_thread_loop.onNext(arrayOf("interrupt1"))
-    }
-
-    fun _51_pipeline_branch() {
-        val ps_head = PublishSubject.create<String>()
-        val ps_branch_0 = PublishSubject.create<String>()
-        val ps_branch_1 = PublishSubject.create<String>()
-
-        ps_head
+        ps0
             .observeOn(Schedulers.io())
             .map {
                 val cmd = it as String
-                LogEx.d("ps_head start $cmd")
 
-                when(cmd) {
+                when (cmd) {
                     "cmd0" -> {
-                        ps_branch_0.onNext("cmd0")
-                    }
-                    "cmd1" -> {
-                        ps_branch_1.onNext("cmd1")
-                    }
-                }
-
-                LogEx.d("ps_head fin $cmd")
-                return@map it
-            }
-            .subscribe()
-
-        ps_branch_0
-            .observeOn(Schedulers.io())
-            .map {
-                val cmd = it as String
-                LogEx.d("ps_branch_0 start $cmd")
-
-                when(cmd) {
-                    "cmd0" -> {
+                        LogEx.d("cmd0 start")
                         runBlocking { delay(1_000) }
-                        ps_head.onNext("cmd0")
+                        LogEx.d("cmd0 fin")
+                        ps0.onNext("cmd0")
                     }
                 }
 
-                LogEx.d("ps_branch_0 fin $cmd")
                 return@map it
             }
             .subscribe()
 
-        ps_branch_1
+        ps1
             .observeOn(Schedulers.io())
             .map {
                 val cmd = it as String
-                LogEx.d("ps_branch_1 start $cmd")
 
-                when(cmd) {
+                when (cmd) {
                     "cmd1" -> {
-                        runBlocking { delay(3_000) }
-                        ps_head.onNext("cmd1")
+                        LogEx.d("cmd1 start")
+                        runBlocking { delay(10_000) }
+                        LogEx.d("cmd1 fin")
+                        ps1.onNext("cmd1")
                     }
                 }
 
-                LogEx.d("ps_branch_1 fin $cmd")
                 return@map it
             }
             .subscribe()
 
-        ps_head.onNext("cmd0")
-        ps_head.onNext("cmd1")
+        ps0.onNext("cmd0")
+        ps1.onNext("cmd1")
     }
 }

@@ -59,51 +59,12 @@
                 android:text="play"
                 android:textAllCaps="false" />
 
-            <CheckBox
-                android:id="@+id/cb_reverse"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="5dp"
-                android:checked="false"
-                android:text="reverse" />
-
-            <Spinner
-                android:id="@+id/sp_speed_ratio"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="5dp"
-                android:spinnerMode="dialog" />
-
             <Button
-                android:id="@+id/btn_frame_prev"
+                android:id="@+id/btn_test"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_margin="5dp"
-                android:text="frame prev"
-                android:textAllCaps="false" />
-
-            <Button
-                android:id="@+id/btn_frame_next"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="5dp"
-                android:text="frame next"
-                android:textAllCaps="false" />
-
-            <Button
-                android:id="@+id/btn_surface_texture_init"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="5dp"
-                android:text="surface_texture_init"
-                android:textAllCaps="false" />
-
-            <Button
-                android:id="@+id/btn_surface_texture_close"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="5dp"
-                android:text="surface_texture_close"
+                android:text="test"
                 android:textAllCaps="false" />
 
         </com.google.android.flexbox.FlexboxLayout>

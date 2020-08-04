@@ -17,7 +17,6 @@ import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.subjects.PublishSubject
 import kotlinx.android.synthetic.main.my_play_video_activity.*
 import java.io.File
-import java.util.*
 import java.util.concurrent.TimeUnit
 
 class MyPlayVideoActivity : AppCompatActivity() {
@@ -103,6 +102,17 @@ class MyPlayVideoActivity : AppCompatActivity() {
                 return@map Any()
             }
             .subscribe()
+
+        this.btn_surface_texture_init.setOnClickListener{ _btn_surface_texture_init_click() }
+        this.btn_surface_texture_close.setOnClickListener{ _btn_surface_texture_close_click() }
+    }
+
+    private fun _btn_surface_texture_close_click() {
+        _pipeline.surface_texture_close()
+    }
+
+    private fun _btn_surface_texture_init_click() {
+        _pipeline.surface_texture_init(this.sv.holder.surface)
     }
 
     private fun _btn_frame_prev_click() {

@@ -3,8 +3,12 @@ package com.hhd.myandvideotest.myplayvideo
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.opengl.GLES20
 import android.view.Surface
+import com.hhd.myandvideotest.mycamerarecord.EglCoreUtil
+import com.hhd.myandvideotest.mycamerarecord.EglSurfaceEx
 import com.hhd.myandvideotest.util.LogEx
+import kotlinx.android.synthetic.main.my_play_video_activity.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -12,6 +16,7 @@ import kotlin.math.max
 
 
 class MyVideoPlayer {
+
 
 
     var curPts: Long = -1L
@@ -33,13 +38,14 @@ class MyVideoPlayer {
     var isReverse = false
 
     private var _extractor: MediaExtractor? = null
-    private var _lastRenderTimeUs: Long = -1L
     private var _maxCodecBufSize = 0
     private var _decorder: MediaCodec? = null
     private var _ptsGroupByGopList: MutableList<MutableList<Long>>? = null
+    private var _renderSurface: Surface? = null
 
 
     fun prepare(srcFile: File, renderSurface: Surface) {
+        _renderSurface = renderSurface
         _extractor = MediaExtractor()
         _extractor!!.setDataSource(srcFile.toString())
 
@@ -229,7 +235,6 @@ class MyVideoPlayer {
         )
 
         if (render) {
-            _lastRenderTimeUs = System.nanoTime() / 1_000
             this.curPts = pts
         }
 
@@ -252,7 +257,6 @@ class MyVideoPlayer {
             _extractor = null
         }
 
-        _lastRenderTimeUs = -1L
         _maxCodecBufSize = 0
 
         if (_decorder != null) {
@@ -262,6 +266,18 @@ class MyVideoPlayer {
         }
 
         _ptsGroupByGopList = null
+
+        if (_renderSurface != null) {
+            EglCoreUtil.init(null, EglCoreUtil.FLAG_RECORDABLE)
+            val winEglSurface = EglSurfaceEx(_renderSurface!!, false)
+            winEglSurface.makeCurrent()
+            GLES20.glClearColor(0F, 0F, 0F, 0F)
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            winEglSurface.swapBuffers()
+            winEglSurface.release()
+            EglCoreUtil.release()
+            _renderSurface = null
+        }
     }
 
     fun advance() {
@@ -366,7 +382,6 @@ class MyVideoPlayer {
 
     fun renderIdxOutBuf(idxOutBuf: Int, pts: Long) {
         LogEx.d("releaseOutputBuffer idx[$idxOutBuf] pts[${pts}]")
-        _lastRenderTimeUs = System.nanoTime() / 1_000
         this.curPts = pts
         _decorder!!.releaseOutputBuffer(idxOutBuf, true)
     }
