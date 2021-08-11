@@ -11,7 +11,6 @@ import com.naver.videocelltech.logsloth.LogSloth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.newSingleThreadContext
 
 class ArfitThreadProtoActivity : AppCompatActivity() {
     val _canvasView:Canvas = Canvas()
@@ -54,9 +53,9 @@ class ArfitThreadProtoActivity : AppCompatActivity() {
         _cam.open {
             LogSloth.enter()
             val img = it
-            val landMarks = _moveNet.calc(img)
-            val poseInfo = _poseAnalyzer.calc(landMarks)
-            val touchResults = _touchAnalyzer.calc(poseInfo)
+            val landMarks = _moveNet.calcLandMarks(img)
+            val poseInfo = _poseAnalyzer.calcPoseInfo(landMarks)
+            val touchResults = _touchAnalyzer.calcTouchResults(poseInfo)
 
             _t_main.launch {
                 LogSloth.enter()
@@ -74,8 +73,12 @@ class ArfitThreadProtoActivity : AppCompatActivity() {
         LogSloth.leave()
     }
 
-    fun _new_coroutine() {
+    fun _new_coroutine_open_camera() {
         ArfitPipeLine.openCamera(_canvasView)
+    }
+
+    fun _new_coroutine_close_camera() {
+        ArfitPipeLine.closeCamera()
     }
 }
 

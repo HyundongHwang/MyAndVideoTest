@@ -1,19 +1,15 @@
 package com.hhd.myandvideotest.arfit_thread_proto
 
 import android.graphics.Canvas
+import com.naver.videocelltech.logsloth.LogSloth
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.consumeEach
 
 object ArfitPipeLine {
-    private var _canvas: Canvas? = null
     private var _touchResults: MyTouchResults? = null
     private var _poseInfo: MyPoseInfo? = null
     private var _landMarks: MyLandMarks? = null
-    private var _image: MyImage? = null
-
-    val _t_cam_render = CoroutineScope(newSingleThreadContext("T_CAM_RENDER"))
-    val _channel_cam_render = Channel<List<Any>>()
 
     val _t_calc = CoroutineScope(newSingleThreadContext("T_CALC"))
     val _channel_calc = Channel<List<Any>>()
@@ -31,48 +27,56 @@ object ArfitPipeLine {
     // val _lock_condition = _lock.newCondition()
 
     init {
-        _t_cam_render.launch {
-            _channel_cam_render.consumeEach {
-                val cmd = it[0] as String
-
-                if (cmd == "IMAGE_RECV") {
-                    _t_main.launch {
-                        _renderer.draw(
-                            _canvas,
-                            _image,
-                            _landMarks,
-                            _poseInfo,
-                            _touchResults
-                        )
-                    }
-                }
-            }
-        }
-
         _t_calc.launch {
             _channel_calc.consumeEach {
                 val cmd = it[0] as String
 
                 if (cmd == "IMAGE_RECV") {
-                    _image = it[1] as MyImage
-                    _landMarks = _moveNet.calc(_image!!)
-                    _poseInfo = _poseAnalyzer.calc(_landMarks!!)
-                    _touchResults = _touchAnalyzer.calc(_poseInfo!!)
+                    val canvas = it[1] as Canvas
+                    val image = it[2] as MyImage
+                    _landMarks = _moveNet.calcLandMarks(image)
+                    _poseInfo = _poseAnalyzer.calcPoseInfo(_landMarks!!)
+                    _touchResults = _touchAnalyzer.calcTouchResults(_poseInfo!!)
                 }
             }
         }
     }
 
     fun openCamera(canvas: Canvas) {
-        _canvas = canvas
-
-        _cam.open {
-            GlobalScope.launch {
+        _t_main.launch {
+            _cam.open {
                 val image = it
-                _channel_cam_render.send(listOf("IMAGE_RECV", image))
-                _channel_calc.send(listOf("IMAGE_RECV", image))
+                _onImgRecv(canvas, image)
             }
         }
     }
 
+    fun closeCamera() {
+        _t_main.launch {
+            _cam.close()
+        }
+    }
+
+
+    private fun _onImgRecv(canvas: Canvas, image: MyImage) {
+        _t_main.launch {
+            _renderer.draw(
+                canvas,
+                image,
+                _landMarks,
+                _poseInfo,
+                _touchResults
+            )
+        }
+
+        GlobalScope.launch {
+
+            while (!_channel_calc.isEmpty) {
+                LogSloth.d("_channel_calc.receive() ...")
+                _channel_calc.receive()
+            }
+
+            _channel_calc.send(listOf("IMAGE_RECV", canvas, image))
+        }
+    }
 }

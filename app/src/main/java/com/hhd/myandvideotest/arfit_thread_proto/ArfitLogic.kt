@@ -2,28 +2,43 @@ package com.hhd.myandvideotest.arfit_thread_proto
 
 import android.graphics.Canvas
 import com.naver.videocelltech.logsloth.LogSloth
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.newSingleThreadContext
+import kotlinx.coroutines.*
 
 class MyCameraX {
-    val _t_cam_inter = CoroutineScope(newSingleThreadContext("T_CAM_INTER"))
+    private var _t_cam_inter: CoroutineScope? = null
+    private var _pts = 0L
 
     fun open(imgRecvCallback: (MyImage) -> Unit) {
-        _t_cam_inter.launch {
+        _t_cam_inter = CoroutineScope(newSingleThreadContext("T_CAM_INTER"))
+
+        _t_cam_inter!!.launch {
+            _pts = 0L
+
             while (true) {
+                if (!this.isActive) {
+                    LogSloth.d("if (!this.isActive) !!!")
+                    break
+                }
+
                 Thread.sleep(1_000)
-                imgRecvCallback(MyImage())
+                imgRecvCallback(MyImage(_pts))
+                _pts += 1
             }
         }
     }
+
+    fun close() {
+        _t_cam_inter?.cancel()
+        _t_cam_inter = null
+    }
 }
 
-class MyImage
+data class MyImage(val pts : Long)
 
 class MyMoveNet {
-    fun calc(img: MyImage): MyLandMarks {
+    fun calcLandMarks(img: MyImage): MyLandMarks {
         LogSloth.enter()
+        LogSloth.d("img.pts:${img.pts}")
         Thread.sleep(1_000)
         LogSloth.leave()
         return MyLandMarks()
@@ -33,7 +48,7 @@ class MyMoveNet {
 class MyLandMarks
 
 class MyPoseAnalyzer {
-    fun calc(landMarks: MyLandMarks): MyPoseInfo {
+    fun calcPoseInfo(landMarks: MyLandMarks): MyPoseInfo {
         LogSloth.enter()
         Thread.sleep(2_000)
         LogSloth.leave()
@@ -44,7 +59,7 @@ class MyPoseAnalyzer {
 class MyPoseInfo
 
 class MyTouchAnalyzer {
-    fun calc(poseInfo: MyPoseInfo): MyTouchResults {
+    fun calcTouchResults(poseInfo: MyPoseInfo): MyTouchResults {
         LogSloth.enter()
         Thread.sleep(3_000)
         LogSloth.leave()
@@ -63,6 +78,7 @@ class MyRenderer {
         touchResults: MyTouchResults?
     ) {
         LogSloth.enter()
+        LogSloth.d("img.pts:${img!!.pts}")
         Thread.sleep(10)
         LogSloth.leave()
     }
