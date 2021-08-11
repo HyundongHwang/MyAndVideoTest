@@ -36,6 +36,9 @@
         <activity
             android:name=".mytest.MyTestActivity"
             android:exported="true" />
+        <activity
+            android:name=".arfit_thread_proto.ArfitThreadProtoActivity"
+            android:exported="true" />
 
     </application>
 
