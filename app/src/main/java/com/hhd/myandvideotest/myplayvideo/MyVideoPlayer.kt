@@ -61,7 +61,7 @@ class MyVideoPlayer {
             fmt = _extractor!!.getTrackFormat(i)
             mime = fmt.getString(MediaFormat.KEY_MIME)
 
-            if (mime.contains("video/")) {
+            if (mime!!.contains("video/")) {
                 idxVideoTrack = i
                 break
             }

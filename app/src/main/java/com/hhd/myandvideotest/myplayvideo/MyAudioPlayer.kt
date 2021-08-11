@@ -51,7 +51,7 @@ class MyAudioPlayer {
             fmt = _extractor!!.getTrackFormat(i)
             mime = fmt.getString(MediaFormat.KEY_MIME)
 
-            if (mime.contains("audio/")) {
+            if (mime!!.contains("audio/")) {
                 idxAudioTrack = i
                 break
             }

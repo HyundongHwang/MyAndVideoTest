@@ -1,12 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.hhd.myandvideotest">
 
-    <uses-feature android:name="android.hardware.Camera"/>
-    <uses-permission android:name="android.permission.CAMERA"/>
-    <uses-permission android:name="android.hardware.camera.autofocus"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-feature android:name="android.hardware.Camera" />
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.hardware.camera.autofocus" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"
@@ -17,17 +18,24 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
-        <activity android:name=".MainActivity">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
             <intent-filter>
                 <category android:name="android.intent.category.LAUNCHER" />
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
         </activity>
 
-        <activity android:name=".mycamerarecordrecord.MyCameraRecordActivity" />
-        <activity android:name=".myplayvideo.MyPlayVideoActivity" />
-        <activity android:name=".mytest.MyTestActivity" />
-        <activity android:name=".myvideoedit.MyVideoEditActivity" />
+        <activity
+            android:name=".mycamerarecordrecord.MyCameraRecordActivity"
+            android:exported="true" />
+        <activity
+            android:name=".myplayvideo.MyPlayVideoActivity"
+            android:exported="true" />
+        <activity
+            android:name=".mytest.MyTestActivity"
+            android:exported="true" />
 
     </application>
 
