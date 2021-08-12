@@ -7,13 +7,14 @@ import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import com.hhd.myandvideotest.util.MyActivityUtil
 import com.hhd.myandvideotest.util.MyUtil
-import com.naver.videocelltech.logsloth.LogSloth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class ArfitThreadProtoActivity : AppCompatActivity() {
-    val _canvasView:Canvas = Canvas()
+    private val _canvasView: Canvas = Canvas()
+    private val _newPipeLine = ArfitPipeLine()
+    private val _oldModel = ArfitOldComplexCallbackModel()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,49 +37,29 @@ class ArfitThreadProtoActivity : AppCompatActivity() {
                 fl.addView(btn)
                 btn.isAllCaps = false
                 btn.text = method.name
-                btn.setOnClickListener { method.invoke(thisObj) }
+                btn.setOnClickListener {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        method.invoke(thisObj)
+                    }
+                }
             }
     }
 
-    val _t_main = CoroutineScope(Dispatchers.Main)
-    val _cam = MyCameraX()
-    val _moveNet = MyMoveNet()
-    val _poseAnalyzer = MyPoseAnalyzer()
-    val _touchAnalyzer = MyTouchAnalyzer()
-    val _renderer = MyRenderer()
-
-    fun _old_complex_callback() {
-        LogSloth.enter()
-
-        _cam.open {
-            LogSloth.enter()
-            val img = it
-            val landMarks = _moveNet.calcLandMarks(img)
-            val poseInfo = _poseAnalyzer.calcPoseInfo(landMarks)
-            val touchResults = _touchAnalyzer.calcTouchResults(poseInfo)
-
-            _t_main.launch {
-                LogSloth.enter()
-                _renderer.draw(
-                    _canvasView,
-                    img,
-                    landMarks,
-                    poseInfo,
-                    touchResults
-                )
-                LogSloth.leave()
-            }
-            LogSloth.leave()
-        }
-        LogSloth.leave()
+    fun _old_model_open_cam() {
+        _oldModel.openCam(_canvasView)
     }
 
-    fun _new_coroutine_open_camera() {
-        ArfitPipeLine.openCamera(_canvasView)
+    fun _old_model_close_cam() {
+        _oldModel.closeCam()
     }
 
-    fun _new_coroutine_close_camera() {
-        ArfitPipeLine.closeCamera()
+    fun _new_pipeline_open_cam() {
+        _newPipeLine.openCam(_canvasView)
+    }
+
+    fun _new_pipeline_close_cam() {
+        _newPipeLine.closeCam()
     }
 }
+
 
